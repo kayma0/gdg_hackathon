@@ -720,7 +720,9 @@ input[type="file"]::file-selector-button:hover {
   font-family: "Patrick Hand", cursive;
   font-size: 0.88rem;
   cursor: pointer;
-  transition: background 0.15s, color 0.15s;
+  transition:
+    background 0.15s,
+    color 0.15s;
 }
 
 .demo-prompt-chip:hover {
@@ -728,8 +730,6 @@ input[type="file"]::file-selector-button:hover {
   color: var(--paper-light);
   border-color: var(--ink);
 }
-
-
 
 .typing-indicator {
   padding: 0 6px 12px;
@@ -2649,4 +2649,17 @@ body.lesson-open {
     align-items: flex-start;
     flex-direction: column;
   }
+}
+
+.workspace.single-column {
+  padding-top: 12px;
+}
+
+.setup-content {
+  padding-top: 0;
+  margin-top: 0;
+}
+
+.setup-content > .message-row {
+  margin-top: 0;
 }
