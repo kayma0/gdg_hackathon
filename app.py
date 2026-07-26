@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import math
 import os
@@ -9,7 +10,6 @@ from io import BytesIO
 from pathlib import Path
 from typing import Any, List
 
-from docx import Document
 from dotenv import load_dotenv
 from fastapi import (
     FastAPI,
@@ -124,6 +124,7 @@ async def create_plan_page(
     start_date: str = Form(...),
     deadline: str = Form(...),
     study_minutes_per_day: int = Form(...),
+    learning_styles: List[str] = Form(default_factory=list),
     uploaded_files: List[UploadFile] = File(
         default_factory=list
     ),
@@ -135,6 +136,7 @@ async def create_plan_page(
         study_minutes_per_day=(
             study_minutes_per_day
         ),
+        learning_styles=learning_styles,
         uploaded_files=uploaded_files,
     )
 
@@ -146,6 +148,9 @@ async def create_plan_page(
             "plan": plan_data["plan"],
             "file_names": plan_data[
                 "file_names"
+            ],
+            "learning_styles": plan_data[
+                "learning_styles"
             ],
             "study_minutes_per_day": (
                 study_minutes_per_day
@@ -164,6 +169,7 @@ async def generate_plan_api(
     start_date: str = Form(...),
     deadline: str = Form(...),
     study_minutes_per_day: int = Form(...),
+    learning_styles: List[str] = Form(default_factory=list),
     uploaded_files: List[UploadFile] = File(
         default_factory=list
     ),
@@ -172,9 +178,8 @@ async def generate_plan_api(
         prompt=prompt,
         start_date=start_date,
         deadline=deadline,
-        study_minutes_per_day=(
-            study_minutes_per_day
-        ),
+        study_minutes_per_day=study_minutes_per_day,
+        learning_styles=learning_styles,
         uploaded_files=uploaded_files,
     )
 
@@ -474,8 +479,13 @@ async def build_plan_response(
     start_date: str,
     deadline: str,
     study_minutes_per_day: int,
+    learning_styles: List[str],
     uploaded_files: List[UploadFile],
 ) -> dict[str, Any]:
+    selected_learning_styles = normalize_learning_styles(
+        learning_styles
+    )
+
     parsed_start, parsed_deadline = (
         validate_date_range(
             start_date,
@@ -557,11 +567,30 @@ async def build_plan_response(
         ),
         raw_text=raw_text,
         file_names=file_names,
+        learning_styles=selected_learning_styles,
+    )
+
+    plan = decorate_plan_with_learning_styles(
+        plan=plan,
+        learning_styles=selected_learning_styles,
+    )
+
+    focus_topics = plan.get(
+        "focus_topics",
+        ["Core concepts"],
+    )
+
+    study_session = (
+        build_placeholder_study_session(
+            focus_topics,
+            selected_learning_styles,
+        )
     )
 
     return {
         "plan": plan,
         "file_names": file_names,
+        "learning_styles": selected_learning_styles,
     }
 
 
@@ -576,86 +605,54 @@ async def build_plan_with_gemma(
     study_minutes: int,
     raw_text: str,
     file_names: List[str],
+    learning_styles: List[str],
 ) -> dict[str, Any]:
+    placeholder_plan = generate_placeholder_plan(
+        prompt=prompt,
+        start_date=start_date,
+        deadline=deadline,
+        study_minutes_per_day=study_minutes,
+        raw_text=raw_text,
+        file_names=file_names,
+        learning_styles=learning_styles,
+    )
+
     if GEMINI_CLIENT is None:
         print(
-            "GEMINI_API_KEY is not "
-            "configured. Using placeholder "
-            "roadmap."
+            "GEMINI_API_KEY is not configured. Using placeholder roadmap."
         )
-
-        return generate_placeholder_plan(
-            prompt=prompt,
-            start_date=start_date,
-            deadline=deadline,
-            study_minutes_per_day=(
-                study_minutes
-            ),
-            raw_text=raw_text,
-            file_names=file_names,
-        )
+        return placeholder_plan
 
     calendar_dates = get_date_range(
         start_date,
         deadline,
     )
-
-    total_days = len(
-        calendar_dates
-    )
-
     date_list = "\n".join(
         (
-            f"- Day {index}: "
-            f"{study_date.isoformat()} "
-            f"({study_date.strftime('%A')})"
+            f"- Day {index}: {study_date.isoformat()} ({study_date.strftime('%A')})"
         )
         for index, study_date in enumerate(
             calendar_dates,
             start=1,
         )
     )
+    source_files = ", ".join(
+        file_names) if file_names else "No filenames supplied"
 
-    system_instruction = """
-You are ZEN, an adaptive study companion.
-
-Analyse the supplied school material and generate a realistic,
-date-based study roadmap.
-
-You must decide:
-
-- the major topics
-- prerequisite order
-- how topics should be divided across the available dates
-- each date's learning objectives
-- concise lesson content
-- exactly three quiz questions for every date
-
-The dates supplied by the application are mandatory.
-
-Return valid JSON only.
-Do not return markdown.
-Do not include text outside the JSON object.
-"""
-
-    source_files = (
-        ", ".join(file_names)
-        if file_names
-        else "No filenames supplied"
+    system_instruction = (
+        "You are ZEN, a supportive study companion. "
+        "Create a realistic dated study roadmap and return valid JSON only. "
+        f"Adapt the plan to these learning styles: {', '.join(learning_styles) if learning_styles else 'balanced mix'}."
     )
-
     user_prompt = f"""
 LEARNER REQUEST:
-{prompt.strip() or "Help me make steady progress."}
+{prompt.strip() or 'Help me make steady progress.'}
 
 ROADMAP START DATE:
 {start_date.isoformat()}
 
 FINAL DEADLINE:
 {deadline.isoformat()}
-
-TOTAL AVAILABLE CALENDAR DAYS:
-{total_days}
 
 STUDY TIME PER DAY:
 {study_minutes} minutes
@@ -670,152 +667,57 @@ COURSE MATERIAL:
 --- START MATERIAL ---
 {raw_text[:12000]}
 --- END MATERIAL ---
-
-Create exactly one roadmap entry for every mandatory date.
-
-Do not:
-- omit any date
-- add extra dates
-- change the supplied date order
-- create dates after the deadline
-- combine two dates into one entry
-
-If there is too much material for the available dates:
-- prioritise prerequisites
-- prioritise important course concepts
-- use concise lessons
-- identify what the learner should revisit later
-
-If there are more dates than major topics:
-- use extra dates for review
-- use extra dates for practice
-- use extra dates for weak-topic recovery
-- use the final date for preparation and consolidation
-
-Return JSON using this structure:
-
-{{
-  "course_title": "string",
-  "course_summary": "string",
-  "learner_goal": "string",
-  "start_date": "{start_date.isoformat()}",
-  "deadline": "{deadline.isoformat()}",
-  "minutes_per_day": {study_minutes},
-  "total_days": {total_days},
-  "midpoint_day": {max(1, math.ceil(total_days / 2))},
-  "current_day": 1,
-  "streak": 0,
-  "completed_days": [],
-  "weak_topics": [],
-  "focus_topics": [
-    "string"
-  ],
-  "roadmap": [
-    {{
-      "day": 1,
-      "study_date": "{start_date.isoformat()}",
-      "title": "string",
-      "status": "available",
-      "estimated_minutes": {study_minutes},
-      "topics": [
-        "string"
-      ],
-      "objectives": [
-        "string"
-      ],
-      "lesson": {{
-        "introduction": "string",
-        "explanation": "string",
-        "example": "string",
-        "recap": [
-          "string"
-        ]
-      }},
-      "quiz": [
-        {{
-          "id": "day-1-q-1",
-          "topic": "string",
-          "question": "string",
-          "options": [
-            "string",
-            "string",
-            "string",
-            "string"
-          ],
-          "correct_answer": 0,
-          "explanation": "string"
-        }}
-      ]
-    }}
-  ]
-}}
-
-Rules:
-
-1. Return exactly {total_days} roadmap entries.
-2. Use the mandatory dates exactly as supplied.
-3. Create exactly three quiz questions per date.
-4. Every quiz question must have four options.
-5. correct_answer must be an integer from 0 to 3.
-6. Only Day 1 should have status "available".
-7. All later days should have status "locked".
-8. Base educational content on the supplied material.
 """
 
     try:
-        response = (
-            GEMINI_CLIENT.models.generate_content(
+        response = await asyncio.wait_for(
+            asyncio.to_thread(
+                GEMINI_CLIENT.models.generate_content,
                 model=GEMINI_MODEL,
                 contents=user_prompt,
                 config=types.GenerateContentConfig(
-                    system_instruction=(
-                        system_instruction
-                    ),
+                    system_instruction=system_instruction,
                     temperature=0.2,
-                    thinking_config=(
-                        types.ThinkingConfig(
-                            thinking_level="high"
-                        )
+                    thinking_config=types.ThinkingConfig(
+                        thinking_level="high"
                     ),
                 ),
-            )
-        )
-
-        parsed_plan = parse_plan_response(
-            raw_response=(
-                response.text or ""
             ),
+            timeout=8,
+        )
+        parsed_plan = parse_plan_response(
+            raw_response=response.text or "",
             study_minutes=study_minutes,
             prompt=prompt,
             start_date=start_date,
             deadline=deadline,
         )
-
         if parsed_plan is not None:
-            return parsed_plan
-
-        print(
-            "Gemma returned invalid "
-            "roadmap JSON. Using "
-            "placeholder roadmap."
-        )
+            merged_plan = dict(placeholder_plan)
+            merged_plan.update(
+                {
+                    key: value
+                    for key, value in parsed_plan.items()
+                    if key
+                    in {
+                        "summary",
+                        "focus_topics",
+                        "study_blocks",
+                        "minimum_win",
+                        "motivation_note",
+                        "custom_prompt",
+                        "daily_time",
+                    }
+                }
+            )
+            return merged_plan
+    except asyncio.TimeoutError:
+        print("Gemma roadmap request timed out after 8 seconds.")
 
     except Exception as exc:
-        print(
-            "Gemma roadmap request "
-            f"failed: {exc}"
-        )
+        print(f"Gemma roadmap request failed: {exc!r}")
 
-    return generate_placeholder_plan(
-        prompt=prompt,
-        start_date=start_date,
-        deadline=deadline,
-        study_minutes_per_day=(
-            study_minutes
-        ),
-        raw_text=raw_text,
-        file_names=file_names,
-    )
+    return placeholder_plan
 
 
 def clean_json_response(
@@ -1333,6 +1235,175 @@ def parse_plan_response(
     }
 
 
+def normalize_learning_styles(learning_styles: List[str]) -> List[str]:
+    selected: list[str] = []
+    seen: set[str] = set()
+
+    for raw_style in learning_styles:
+        style = str(raw_style).strip().lower()
+
+        if not style:
+            continue
+
+        if style not in LEARNING_STYLE_LIBRARY:
+            continue
+
+        if style in seen:
+            continue
+
+        seen.add(style)
+        selected.append(style)
+
+    return selected or ["balanced"]
+
+
+def build_learning_style_guidance(
+    learning_styles: List[str],
+) -> dict[str, Any]:
+    selected = normalize_learning_styles(learning_styles)
+
+    if selected == ["balanced"]:
+        return {
+            "title": "Balanced study mode",
+            "summary": (
+                "The roadmap will mix visuals, recall, summaries and quick checks so the plan stays flexible."
+            ),
+            "highlights": [
+                {
+                    "label": "Balanced",
+                    "description": (
+                        "A mix of short explanations, quick practice and clear recap steps."
+                    ),
+                }
+            ],
+            "primary_label": "Balanced",
+        }
+
+    highlights: list[dict[str, str]] = []
+    for style in selected:
+        profile = LEARNING_STYLE_LIBRARY[style]
+        highlights.append(
+            {
+                "label": profile["label"],
+                "description": profile["summary"],
+            }
+        )
+
+    primary_label = ", ".join(
+        LEARNING_STYLE_LIBRARY[style]["label"]
+        for style in selected
+    )
+
+    summary = (
+        "This roadmap will emphasise "
+        f"{primary_label.lower()} so the next page shows the ideas "
+        "in the format you learn best."
+    )
+
+    return {
+        "title": "Learning style roadmap",
+        "summary": summary,
+        "highlights": highlights,
+        "primary_label": primary_label,
+    }
+
+
+def build_style_hint(
+    style_key: str,
+    topic: str,
+) -> str:
+    if style_key == "balanced":
+        return (
+            f"Balanced cue: review {topic} with a short summary, example and recall check."
+        )
+
+    profile = LEARNING_STYLE_LIBRARY[style_key]
+
+    return profile["day_hint"].replace("your topic", topic)
+
+
+def build_style_objective(
+    style_key: str,
+    topic: str,
+) -> str:
+    if style_key == "balanced":
+        return (
+            f"Understand the main ideas behind {topic}."
+        )
+
+    profile = LEARNING_STYLE_LIBRARY[style_key]
+    return profile["objective"].format(topic=topic)
+
+
+def decorate_plan_with_learning_styles(
+    plan: dict[str, Any],
+    learning_styles: List[str],
+) -> dict[str, Any]:
+    selected = normalize_learning_styles(learning_styles)
+    roadmap = plan.get("roadmap", [])
+
+    for day_number, day in enumerate(roadmap, start=1):
+        style_key = selected[(day_number - 1) % len(selected)]
+        topic = day.get("topics", ["the topic"])[0]
+
+        day["style_key"] = style_key
+        day["style_label"] = (
+            "Balanced"
+            if style_key == "balanced"
+            else LEARNING_STYLE_LIBRARY[style_key]["label"]
+        )
+        day["style_hint"] = build_style_hint(
+            style_key,
+            topic,
+        )
+
+        objectives = list(day.get("objectives", []))
+        if objectives:
+            objectives[0] = build_style_objective(
+                style_key,
+                topic,
+            )
+            day["objectives"] = objectives
+
+        lesson = day.get("lesson", {})
+        if isinstance(lesson, dict):
+            lesson["explanation"] = (
+                f"Use a {day['style_label'].lower()} approach to study {topic}. "
+                f"{day['style_hint']}"
+            )
+            day["lesson"] = lesson
+
+        quiz_items = day.get("quiz", [])
+        if isinstance(quiz_items, list) and quiz_items:
+            quiz_items[0]["explanation"] = (
+                f"This question fits a {day['style_label'].lower()} review style."
+            )
+            day["quiz"] = quiz_items
+
+    plan["learning_styles"] = selected
+    plan["learning_style_guidance"] = build_learning_style_guidance(
+        selected
+    )
+
+    if plan.get("study_blocks"):
+        study_blocks = list(plan["study_blocks"])
+        for index, block in enumerate(study_blocks):
+            style_key = selected[index % len(selected)]
+            style_label = (
+                "Balanced"
+                if style_key == "balanced"
+                else LEARNING_STYLE_LIBRARY[style_key]["label"]
+            )
+            block["style_label"] = style_label
+            block["style_hint"] = build_style_hint(
+                style_key,
+                str(block.get("focus", "the topic")),
+            )
+        plan["study_blocks"] = study_blocks
+
+    return plan
+
+
 # ---------------------------------------------------------
 # Gemma chat
 # ---------------------------------------------------------
@@ -1353,30 +1424,29 @@ async def build_chat_response(
         }
 
     try:
-        chat = (
-            GEMINI_CLIENT.chats.create(
-                model=GEMINI_MODEL,
-                config=(
-                    types.GenerateContentConfig(
-                        system_instruction=(
-                            "You are ZEN, a "
-                            "supportive and concise "
-                            "study companion. Help "
-                            "the learner understand "
-                            "concepts, stay focused "
-                            "and take the next small "
-                            "study action."
-                        ),
-                        temperature=0.4,
-                    )
+        chat = await asyncio.to_thread(
+            GEMINI_CLIENT.chats.create,
+            model=GEMINI_MODEL,
+            config=types.GenerateContentConfig(
+                system_instruction=(
+                    "You are ZEN, a "
+                    "supportive and concise "
+                    "study companion. Help "
+                    "the learner understand "
+                    "concepts, stay focused "
+                    "and take the next small "
+                    "study action."
                 ),
+                temperature=0.4,
             )
         )
 
-        first_response = (
-            chat.send_message(
-                message
-            )
+        first_response = await asyncio.wait_for(
+            asyncio.to_thread(
+                chat.send_message,
+                message,
+            ),
+            timeout=8,
         )
 
         first_reply = (
@@ -1386,10 +1456,12 @@ async def build_chat_response(
         follow_up_reply = ""
 
         if follow_up:
-            second_response = (
-                chat.send_message(
-                    follow_up
-                )
+            second_response = await asyncio.wait_for(
+                asyncio.to_thread(
+                    chat.send_message,
+                    follow_up,
+                ),
+                timeout=8,
             )
 
             follow_up_reply = (
@@ -1407,10 +1479,13 @@ async def build_chat_response(
             ),
         }
 
+    except asyncio.TimeoutError:
+        print("Gemma chat request timed out after 8 seconds.")
+
     except Exception as exc:
         print(
             "Gemma chat request "
-            f"failed: {exc}"
+            f"failed: {exc!r}"
         )
 
         return {
@@ -1973,6 +2048,9 @@ async def extract_text_from_upload(
 
     try:
         if suffix == ".pptx":
+            if Presentation is None:
+                return ""
+
             presentation = Presentation(
                 BytesIO(contents)
             )
@@ -1982,6 +2060,9 @@ async def extract_text_from_upload(
             )
 
         if suffix == ".docx":
+            if Document is None:
+                return ""
+
             document = Document(
                 BytesIO(contents)
             )
@@ -2013,7 +2094,7 @@ async def extract_text_from_upload(
 
 
 def extract_text_from_pptx(
-    presentation: Presentation,
+    presentation: Any,
 ) -> str:
     text_parts: list[str] = []
 
@@ -2070,6 +2151,9 @@ def load_demo_text_from_folder() -> str:
 
         try:
             if suffix == ".pptx":
+                if Presentation is None:
+                    continue
+
                 presentation = Presentation(
                     str(file_path)
                 )
@@ -2081,6 +2165,9 @@ def load_demo_text_from_folder() -> str:
                 )
 
             elif suffix == ".docx":
+                if Document is None:
+                    continue
+
                 document = Document(
                     str(file_path)
                 )
@@ -2130,9 +2217,13 @@ def generate_placeholder_plan(
     study_minutes_per_day: int,
     raw_text: str,
     file_names: list[str],
+    learning_styles: List[str] | None = None,
 ) -> dict[str, Any]:
     topics = extract_placeholder_topics(
         raw_text
+    )
+    selected_learning_styles = normalize_learning_styles(
+        learning_styles or []
     )
 
     study_minutes = max(
@@ -2147,6 +2238,8 @@ def generate_placeholder_plan(
         start_date,
         deadline,
     )
+
+    total_days = len(calendar_dates)
 
     roadmap: list[
         dict[str, Any]
@@ -2232,9 +2325,12 @@ def generate_placeholder_plan(
                 ),
                 "topics": day_topics,
                 "objectives": [
-                    (
-                        "Understand the main "
-                        f"ideas behind {topic}."
+                    build_style_objective(
+                        selected_learning_styles[
+                            (index - 1)
+                            % len(selected_learning_styles)
+                        ],
+                        topic,
                     ),
                     (
                         f"Connect {topic} to "
@@ -2279,89 +2375,222 @@ def generate_placeholder_plan(
                         ),
                     ],
                 },
-                "quiz": (
-                    create_placeholder_quiz(
-                        day_number=index,
-                        topic=topic,
-                        next_topic=next_topic,
-                    )
+                "quiz": [
+                    {
+                        "id": (
+                            f"day-{index}-q-1"
+                        ),
+                        "topic": topic,
+                        "question": (
+                            "What is the main idea "
+                            f"behind {topic}?"
+                        ),
+                        "options": [
+                            "The central definition",
+                            "An unrelated detail",
+                            "A file name",
+                            "A study deadline",
+                        ],
+                        "correct_answer": 0,
+                        "explanation": (
+                            "The first option "
+                            "describes the core concept."
+                        ),
+                    },
+                    {
+                        "id": (
+                            f"day-{index}-q-2"
+                        ),
+                        "topic": topic,
+                        "question": (
+                            "What is a useful way "
+                            f"to review {topic}?"
+                        ),
+                        "options": [
+                            (
+                                "Explain it using "
+                                "your own words"
+                            ),
+                            "Ignore all examples",
+                            (
+                                "Skip the topic "
+                                "completely"
+                            ),
+                            "Only read the title",
+                        ],
+                        "correct_answer": 0,
+                        "explanation": (
+                            "Explaining a topic in "
+                            "your own words helps "
+                            "reveal gaps."
+                        ),
+                    },
+                    {
+                        "id": (
+                            f"day-{index}-q-3"
+                        ),
+                        "topic": next_topic,
+                        "question": (
+                            f"Why should {next_topic} "
+                            "be connected to earlier "
+                            "topics?"
+                        ),
+                        "options": [
+                            (
+                                "It helps build a "
+                                "logical understanding"
+                            ),
+                            (
+                                "It makes the deadline "
+                                "longer"
+                            ),
+                            (
+                                "It removes the "
+                                "course files"
+                            ),
+                            (
+                                "It changes the "
+                                "file format"
+                            ),
+                        ],
+                        "correct_answer": 0,
+                        "explanation": (
+                            "Connections between "
+                            "topics support deeper "
+                            "understanding."
+                        ),
+                    },
+                ],
+                "style_key": selected_learning_styles[
+                    (index - 1)
+                    % len(selected_learning_styles)
+                ],
+                "style_label": (
+                    "Balanced"
+                    if selected_learning_styles[
+                        (index - 1)
+                        % len(selected_learning_styles)
+                    ] == "balanced"
+                    else LEARNING_STYLE_LIBRARY[
+                        selected_learning_styles[
+                            (index - 1)
+                            % len(selected_learning_styles)
+                        ]
+                    ]["label"]
+                ),
+                "style_hint": build_style_hint(
+                    selected_learning_styles[
+                        (index - 1)
+                        % len(selected_learning_styles)
+                    ],
+                    topic,
                 ),
             }
         )
 
     source_label = (
-        ", ".join(
-            file_names[:2]
-        )
+        ", ".join(file_names[:2])
         if file_names
         else "your provided material"
     )
 
-    total_days = len(
-        calendar_dates
+    course_title = (
+        topics[0].title()
+        if topics
+        else "Study Course"
     )
 
+    summary = (
+        f"ZEN created a {total_days}-day "
+        f"study roadmap using {source_label}."
+    )
+
+    study_blocks = [
+        {
+            "title": (
+                f"Day {day['day']}: "
+                f"{day['title']}"
+            ),
+            "focus": ", ".join(
+                day["topics"]
+            ),
+            "time": (
+                f"{day['estimated_minutes']} "
+                "minutes"
+            ),
+            "goal": day["objectives"][0],
+            "style_label": day["style_label"],
+            "style_hint": day["style_hint"],
+        }
+        for day in roadmap
+    ]
+
     return {
-        "course_title": (
-            topics[0].title()
-            if topics
-            else "Study Course"
-        ),
-        "course_summary": (
-            f"ZEN created a "
-            f"{total_days}-day dated "
-            f"roadmap using "
-            f"{source_label}."
-        ),
+        "course_title": course_title,
+        "course_summary": summary,
         "learner_goal": (
             prompt.strip()
             or "Make steady study progress."
         ),
-        "start_date": (
-            start_date.isoformat()
-        ),
         "deadline": (
             deadline.isoformat()
         ),
-        "start_display_date": (
-            format_short_display_date(
-                start_date
-            )
-        ),
-        "deadline_display_date": (
-            format_short_display_date(
-                deadline
-            )
-        ),
-        "start_month": (
-            start_date.strftime(
-                "%b"
-            ).upper()
-        ),
-        "start_day_number": (
-            start_date.strftime(
-                "%d"
-            )
-        ),
-        "minutes_per_day": (
-            study_minutes
-        ),
+        "minutes_per_day": study_minutes,
         "total_days": total_days,
         "midpoint_day": max(
             1,
-            math.ceil(
-                total_days / 2
-            ),
+            math.ceil(total_days / 2),
         ),
         "current_day": 1,
         "streak": 0,
         "completed_days": [],
         "weak_topics": [],
-        "focus_topics": (
-            topics[:8]
-        ),
+        "focus_topics": topics[:6],
         "roadmap": roadmap,
+        "learning_styles": selected_learning_styles,
+        "learning_style_guidance": build_learning_style_guidance(
+            selected_learning_styles
+        ),
+        "summary": summary,
+        "custom_prompt": (
+            prompt.strip()
+            or "Keep the plan realistic."
+        ),
+        "study_blocks": study_blocks,
+        "minimum_win": (
+            "Spend 10 minutes reviewing "
+            f"{topics[0]} and write three "
+            "key ideas."
+        ),
+        "motivation_note": (
+            "Start with one manageable session. "
+            "Progress matters more than perfection."
+        ),
+        "daily_time": (
+            f"{study_minutes} minutes per day"
+        ),
     }
+
+
+def determine_placeholder_days(
+    deadline: str,
+) -> int:
+    match = re.search(
+        r"\d+",
+        deadline or "",
+    )
+
+    if not match:
+        return 4
+
+    requested_days = int(
+        match.group()
+    )
+
+    return max(
+        2,
+        min(requested_days, 10),
+    )
 
 
 def create_placeholder_quiz(
@@ -2527,3 +2756,99 @@ def extract_placeholder_topics(
         ]
 
     return topics
+
+
+def build_day_title(
+    day_number: int,
+    topic: str,
+) -> str:
+    if day_number == 1:
+        return (
+            f"Getting started with {topic}"
+        )
+
+    return f"Understanding {topic}"
+
+
+# ---------------------------------------------------------
+# Placeholder study session
+# ---------------------------------------------------------
+
+def build_placeholder_study_session(
+    topics: list[str],
+    learning_styles: list[str] | None = None,
+) -> dict[str, Any]:
+    first_topic = (
+        topics[0]
+        if topics
+        else "the first topic"
+    )
+
+    second_topic = (
+        topics[1]
+        if len(topics) > 1
+        else first_topic
+    )
+    selected_learning_styles = normalize_learning_styles(
+        learning_styles or []
+    )
+    primary_style = selected_learning_styles[0]
+    style_label = (
+        "Balanced"
+        if primary_style == "balanced"
+        else LEARNING_STYLE_LIBRARY[primary_style]["label"]
+    )
+    style_hint = build_style_hint(
+        primary_style,
+        first_topic,
+    )
+
+    return {
+        "title": (
+            f"Mini study session: {first_topic}"
+        ),
+        "explanation": (
+            "Begin by identifying the main idea "
+            f"behind {first_topic}. Then connect it "
+            "to one example from your material. "
+            f"Style focus: {style_label}. {style_hint}"
+        ),
+        "flashcards": [
+            {
+                "question": (
+                    "What is the main idea behind "
+                    f"{first_topic}?"
+                ),
+                "answer": (
+                    "Describe the concept briefly "
+                    "in your own words."
+                ),
+            },
+            {
+                "question": (
+                    f"How does {second_topic} "
+                    "connect to the course?"
+                ),
+                "answer": (
+                    "Connect it to a definition, "
+                    "example or process."
+                ),
+            },
+        ],
+        "quiz": {
+            "question": (
+                "What should you review first "
+                f"about {first_topic}?"
+            ),
+            "answer": (
+                "Start with its main definition "
+                "and one clear example."
+            ),
+        },
+        "open_question": (
+            f"Explain {first_topic} as though "
+            "you were teaching it to a friend."
+        ),
+        "style_label": style_label,
+        "style_hint": style_hint,
+    }

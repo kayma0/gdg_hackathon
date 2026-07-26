@@ -45,6 +45,20 @@
       </div>
     </header>
 
+    <section class="roadmap-progress-rail" aria-label="Course progress">
+      <div class="progress-strip-heading">
+        <strong>Course progress</strong>
+      </div>
+
+      <div class="progress-track">
+        <div class="progress-value" style="width: 0%"></div>
+      </div>
+
+      <p class="progress-strip-note">
+        This shows how far through your roadmap you are as you complete study days.
+      </p>
+    </section>
+
     <section class="workspace">
       <section class="chat-panel">
         <div class="chat-header">
@@ -186,16 +200,31 @@
           </div>
         </div>
 
-        <div class="progress-card">
-          <div class="progress-heading">
-            <span>Course progress</span>
-            <strong>0%</strong>
+        <section class="learning-style-card">
+          <div class="learning-style-card-header">
+            <div>
+              <p class="section-label">Learning style</p>
+              <h3>{{ plan.learning_style_guidance.title }}</h3>
+            </div>
+
+            <span class="learning-style-badge">
+              {{ plan.learning_style_guidance.primary_label }}
+            </span>
           </div>
 
-          <div class="progress-track">
-            <div class="progress-value" style="width: 0%"></div>
-          </div>
+          <p class="learning-style-summary">
+            {{ plan.learning_style_guidance.summary }}
+          </p>
 
+          <div class="learning-style-highlights">
+            {% for highlight in plan.learning_style_guidance.highlights %}
+            <article class="learning-style-highlight">
+              <strong>{{ highlight.label }}</strong>
+              <span>{{ highlight.description }}</span>
+            </article>
+            {% endfor %}
+          </div>
+        </section>
           <p>
             Each level is assigned to a real calendar date. Click a level to
             generate its Gemma-powered lesson and quiz.
@@ -228,6 +257,12 @@
               </div>
 
               <h3>{{ day.title }}</h3>
+
+              {% if day.style_hint %}
+              <p class="roadmap-style-note">
+                {{ day.style_label }}: {{ day.style_hint }}
+              </p>
+              {% endif %}
 
               <p class="roadmap-full-date">
                 {{ day.display_date }}
