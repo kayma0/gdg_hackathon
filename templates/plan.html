@@ -1,97 +1,216 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Study Sprint</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="/static/styles.css" />
-  </head>
-  <body>
-    <main class="page-shell">
-      <section class="hero-card">
-        <div class="hero-copy">
-          <p class="eyebrow">Progress over perfection</p>
-          <h1>Your study sprint is ready.</h1>
-          <p class="hero-text">
-            You asked for a plan built around {{ study_minutes_per_day }} minutes per day and a deadline of {{ deadline }}.
-          </p>
-          <div class="hero-badges">
-            <span>Short sessions</span>
-            <span>Small wins first</span>
-            <span>Built for your materials</span>
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <title>ZEN Study Companion</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+
+<body>
+  <main class="zen-app">
+    <header class="topbar">
+      <a href="/" class="brand">
+        <div class="brand-mark">Z</div>
+
+        <div>
+          <h1>ZEN</h1>
+          <p>Your adaptive study companion</p>
+        </div>
+      </a>
+
+      <div class="topbar-actions">
+        <div class="streak-pill">
+          <span>🔥</span>
+          <strong>2 day streak</strong>
+        </div>
+
+        <button class="profile-button" type="button" aria-label="Profile">
+          A
+        </button>
+      </div>
+    </header>
+
+    <section class="workspace">
+      <!-- Chat column -->
+      <section class="chat-panel">
+        <div class="chat-header">
+          <div>
+            <p class="section-label">Study space</p>
+            <h2>Chat with ZEN</h2>
+          </div>
+
+          <button type="button" class="icon-button" id="clear-chat" aria-label="Clear chat" title="Clear chat">
+            ↻
+          </button>
+        </div>
+
+        <div class="chat-messages" id="chat-messages">
+          <article class="message-row assistant-message">
+            <div class="message-avatar">Z</div>
+
+            <div class="message-content">
+              <div class="message-meta">
+                <strong>ZEN</strong>
+                <span>Study companion</span>
+              </div>
+
+              <div class="message-bubble">
+                <p>
+                  Your roadmap is ready. Today, we’ll begin with
+                  <strong>
+                    {{ plan.roadmap[0].title if plan.roadmap else "your first topic" }}
+                  </strong>.
+                </p>
+
+                <p>
+                  Before we begin, how much time can you commit to this
+                  session?
+                </p>
+              </div>
+
+              <div class="commitment-options">
+                <button type="button" class="quick-action" data-message="I can study for 10 minutes.">
+                  Quick 10 minutes
+                </button>
+
+                <button type="button" class="quick-action primary-action"
+                  data-message="I can complete the full planned session.">
+                  Full session
+                </button>
+
+                <button type="button" class="quick-action" data-message="I need to reschedule today's session.">
+                  Reschedule
+                </button>
+              </div>
+            </div>
+          </article>
+        </div>
+
+        <div class="typing-indicator" id="typing-indicator" hidden>
+          <div class="message-avatar">Z</div>
+
+          <div class="typing-bubble">
+            <span></span>
+            <span></span>
+            <span></span>
           </div>
         </div>
 
-        <div class="wizard-card">
-          <div class="plan-card">
-            <div class="result-section">
-              <h2>{{ plan.summary }}</h2>
-              <p class="muted">Prompt: {{ plan.custom_prompt }}</p>
-              {% if file_names %}
-              <p class="muted">Files used: {{ file_names | join(', ') }}</p>
+        <form class="chat-composer" id="chat-form">
+          <div class="composer-tools">
+            <button type="button" class="attachment-button" id="attachment-button" aria-label="Attach study material">
+              +
+            </button>
+
+            <input type="file" id="chat-file-input" accept=".pptx,.docx,.txt,.pdf" multiple hidden />
+          </div>
+
+          <div class="composer-main">
+            <textarea id="chat-input" rows="1" maxlength="2000"
+              placeholder="Ask ZEN about your course material..."></textarea>
+
+            <div class="attachment-preview" id="attachment-preview"></div>
+          </div>
+
+          <button type="submit" class="send-button" id="send-button" aria-label="Send message">
+            <span>Send</span>
+            <span aria-hidden="true">↑</span>
+          </button>
+        </form>
+
+        <p class="chat-disclaimer">
+          ZEN can make mistakes. Check important course information against
+          your original materials.
+        </p>
+      </section>
+
+      <!-- Roadmap column -->
+      <aside class="roadmap-panel">
+        <div class="roadmap-header">
+          <div>
+            <p class="section-label">Learning journey</p>
+            <h2>Your roadmap</h2>
+          </div>
+
+          <span class="roadmap-count">
+            {{ plan.total_days }} days
+          </span>
+        </div>
+
+        <div class="progress-card">
+          <div class="progress-heading">
+            <span>Course progress</span>
+            <strong>0%</strong>
+          </div>
+
+          <div class="progress-track">
+            <div class="progress-value" style="width: 0%"></div>
+          </div>
+
+          <p>
+            Your roadmap adapts as you complete quizzes and reveal weaker
+            topics.
+          </p>
+        </div>
+
+        <div class="roadmap-list">
+          {% for day in plan.roadmap %}
+          <article
+            class="roadmap-item {% if day.status == 'available' %}current{% elif day.status == 'completed' %}completed{% else %}locked{% endif %}">
+            <div class="roadmap-marker">
+              {% if day.status == "completed" %}
+              ✓
+              {% elif day.status == "locked" %}
+              🔒
+              {% else %}
+              {{ day.day }}
               {% endif %}
             </div>
 
-            <div class="result-section">
-              <h3>Study timeline</h3>
-              <div class="timeline">
-                {% for block in plan.study_blocks %}
-                <div class="timeline-item">
-                  <strong>{{ block.title }}</strong>
-                  <div>{{ block.focus }}</div>
-                  <div class="muted">{{ block.time }} • {{ block.goal }}</div>
-                </div>
+            <div class="roadmap-copy">
+              <div class="roadmap-meta">
+                <span>Day {{ day.day }}</span>
+                <span>{{ day.estimated_minutes }} min</span>
+              </div>
+
+              <h3>{{ day.title }}</h3>
+
+              <div class="topic-tags">
+                {% for topic in day.topics[:2] %}
+                <span>{{ topic }}</span>
                 {% endfor %}
               </div>
             </div>
-
-            <div class="result-section">
-              <h3>Minimum win for today</h3>
-              <p>{{ plan.minimum_win }}</p>
-            </div>
-
-            <div class="result-section">
-              <h3>Momentum note</h3>
-              <p>{{ plan.motivation_note }}</p>
-            </div>
-
-            <button id="start-study" type="button">Start study</button>
-
-            <div id="study-mode" class="study-section">
-              <div class="study-card">
-                <h3>{{ study_session.title }}</h3>
-                <p>{{ study_session.explanation }}</p>
-
-                <div class="result-section">
-                  <h4>Flashcards</h4>
-                  {% for card in study_session.flashcards %}
-                  <div class="timeline-item">
-                    <strong>Q:</strong> {{ card.question }}
-                    <div class="muted"><strong>A:</strong> {{ card.answer }}</div>
-                  </div>
-                  {% endfor %}
-                </div>
-
-                <div class="result-section">
-                  <h4>Mini quiz</h4>
-                  <p><strong>Q:</strong> {{ study_session.quiz.question }}</p>
-                  <p class="muted"><strong>A:</strong> {{ study_session.quiz.answer }}</p>
-                </div>
-
-                <div class="result-section">
-                  <h4>Open question</h4>
-                  <p>{{ study_session.open_question }}</p>
-                </div>
-              </div>
-            </div>
-          </div>
+          </article>
+          {% endfor %}
         </div>
-      </section>
-    </main>
 
-    <script src="/static/app.js"></script>
-  </body>
+        <section class="focus-card">
+          <div class="focus-icon">◎</div>
+
+          <div>
+            <p class="section-label">ZEN focus</p>
+            <h3>Build momentum first</h3>
+            <p>
+              Complete one manageable session today. Your roadmap will adapt
+              from there.
+            </p>
+          </div>
+        </section>
+      </aside>
+    </section>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+
 </html>
