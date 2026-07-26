@@ -1,112 +1,122 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>ZEN Study Companion</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="/static/styles.css" />
-  </head>
-  <body>
-    <main class="zen-app">
-      <header class="topbar">
-        <a href="/" class="brand">
-          <div class="brand-mark">Z</div>
-          <div>
-            <h1>ZEN</h1>
-            <p>Your adaptive study companion</p>
-          </div>
-        </a>
 
-        <div class="topbar-actions">
-          <div class="streak-pill">
-            <span>🔥</span>
-            <strong>2 day streak</strong>
-          </div>
-          <button class="profile-button" type="button" aria-label="Profile">A</button>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <title>ZEN Study Companion</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Patrick+Hand&display=swap"
+    rel="stylesheet" />
+
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+
+<body>
+  <main class="zen-app">
+    <header class="topbar">
+      <a href="/" class="brand">
+        <div class="brand-mark">Z</div>
+
+        <div>
+          <h1>ZEN</h1>
+          <p>Your adaptive study companion</p>
         </div>
-      </header>
+      </a>
 
-      <section class="workspace">
-        <section class="chat-panel">
-          <div class="chat-header">
-            <div>
-              <p class="section-label">Study setup</p>
-              <h2>Begin your study sprint</h2>
-            </div>
+      <div class="topbar-actions">
+        <div class="streak-pill">
+          <span>🔥</span>
+          <strong>2 day streak</strong>
+        </div>
+
+        <button class="profile-button" type="button" aria-label="Profile">
+          A
+        </button>
+      </div>
+    </header>
+
+    <section class="workspace single-column">
+      <section class="chat-panel setup-panel">
+        <div class="chat-header">
+          <div>
+            <p class="section-label">Study setup</p>
+            <h2>Begin your study sprint</h2>
           </div>
+        </div>
 
-          <div class="chat-messages">
-            <article class="message-row assistant-message">
-              <div class="message-avatar">Z</div>
-              <div class="message-content">
-                <div class="message-bubble">
-                  <p>Upload your lecture materials and I’ll turn them into a short, calm plan for the day.</p>
-                  <p>Keep it simple. Progress over perfection.</p>
-                </div>
+        <div class="setup-content">
+          <article class="message-row assistant-message">
+            <div class="message-avatar">Z</div>
+
+            <div class="message-content">
+              <div class="message-meta">
+                <strong>ZEN</strong>
+                <span>Study companion</span>
               </div>
-            </article>
 
-            <form class="setup-form" action="/plan" method="post" enctype="multipart/form-data">
+              <div class="message-bubble">
+                <p>
+                  Upload your lecture materials and I’ll turn them into a
+                  calm, personalised study roadmap.
+                </p>
+
+                <p>
+                  Tell me your deadline and how much time you can study each
+                  day.
+                </p>
+              </div>
+            </div>
+          </article>
+
+          <form class="setup-form" action="/plan" method="post" enctype="multipart/form-data">
+            <label class="field">
+              <span>Prompt</span>
+
+              <textarea name="prompt" rows="4">
+Help me make steady progress with limited time. Make the plan realistic, short, and motivating.</textarea>
+            </label>
+
+            <label class="field">
+              <span>Upload study materials</span>
+
+              <input type="file" name="uploaded_files" accept=".pptx,.docx,.txt" multiple />
+
+              <small class="subtle-note">
+                You can upload more than one file for the demo.
+              </small>
+            </label>
+
+            <div class="row-fields">
               <label class="field">
-                <span>Prompt</span>
-                <textarea name="prompt" rows="4">Help me make steady progress with limited time. Make the plan realistic, short, and motivating.</textarea>
+                <span>Deadline</span>
+
+                <input type="text" name="deadline" placeholder="e.g. 3 days from now" required />
               </label>
 
               <label class="field">
-                <span>Upload study materials</span>
-                <input type="file" name="uploaded_files" accept=".pptx,.docx,.txt" multiple />
-                <small class="subtle-note">You can upload more than one file for the demo.</small>
+                <span>Study time per day</span>
+
+                <input type="number" name="study_minutes_per_day" min="10" max="180" value="45" required />
+
+                <small class="subtle-note">
+                  Enter how many minutes you can study each day.
+                </small>
               </label>
-
-              <div class="row-fields">
-                <label class="field">
-                  <span>Deadline</span>
-                  <input type="text" name="deadline" placeholder="e.g. 3 days from now" />
-                </label>
-                <label class="field">
-                  <span>Study time per day</span>
-                  <input type="number" name="study_minutes_per_day" min="10" max="180" value="45" />
-                  <small class="subtle-note">This is the number of minutes you can study each day.</small>
-                </label>
-              </div>
-
-              <button class="submit-button" type="submit">Create my study sprint</button>
-            </form>
-          </div>
-        </section>
-
-        <aside class="roadmap-panel">
-          <div class="roadmap-header">
-            <div>
-              <p class="section-label">Why this works</p>
-              <h2>Small steps matter</h2>
             </div>
-          </div>
 
-          <div class="progress-card">
-            <div class="progress-heading">
-              <span>Momentum focus</span>
-              <strong>1 win</strong>
-            </div>
-            <div class="progress-track">
-              <div class="progress-value" style="width: 70%"></div>
-            </div>
-            <p>Your best move is to begin with one short session instead of waiting for the perfect plan.</p>
-          </div>
-
-          <div class="focus-card">
-            <div class="focus-icon">◎</div>
-            <div>
-              <p class="section-label">ZEN focus</p>
-              <h3>Start with one clear task</h3>
-              <p>Review one concept, write one summary, and stop when the timer ends.</p>
-            </div>
-          </div>
-        </aside>
+            <button class="submit-button" type="submit">
+              Create my study roadmap
+            </button>
+          </form>
+        </div>
       </section>
-    </main>
-  </body>
+    </section>
+  </main>
+</body>
+
 </html>
