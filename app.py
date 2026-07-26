@@ -233,7 +233,7 @@ async def build_plan_response(
 
     # TEMPORARY:
     # Replace this function call with the Gemma function later.
-    plan = generate_placeholder_plan(
+    plan = generate_placeholder_plan()
     plan=await build_plan_with_gemini(
         prompt=prompt,
         deadline=deadline,
