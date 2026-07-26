@@ -53,7 +53,7 @@ GEMINI_API_KEY = (
 GEMINI_MODEL = "gemma-4-26b-a4b-it"
 
 GEMINI_SUPPORT_TIMEOUT_SECONDS = 8
-GEMINI_ROADMAP_TIMEOUT_SECONDS = 10
+GEMINI_ROADMAP_TIMEOUT_SECONDS = 30
 GEMINI_CHAT_TIMEOUT_SECONDS = 20
 
 GEMINI_CLIENT = (
@@ -87,6 +87,8 @@ class LessonRequest(BaseModel):
     topics: list[str]
     objectives: list[str]
     estimated_minutes: int
+
+
 STUDY_LEVEL_LIBRARY: dict[str, dict[str, Any]] = {
     "beginner": {
         "label": "Beginner",
@@ -749,7 +751,8 @@ async def build_support_profile(
     if GEMINI_CLIENT is None:
         return heuristic_profile
 
-    source_files = ", ".join(file_names) if file_names else "No filenames supplied"
+    source_files = ", ".join(
+        file_names) if file_names else "No filenames supplied"
 
     user_prompt = f"""
 LEARNER REQUEST:
@@ -841,17 +844,20 @@ def parse_support_profile_response(
             "level_label": str(parsed.get("level_label", fallback["level_label"])),
             "mood_label": str(parsed.get("mood_label", fallback["mood_label"])),
             "readiness_score": round(
-                max(0.05, min(0.95, safe_float(parsed.get("readiness_score"), fallback["readiness_score"]))),
+                max(0.05, min(0.95, safe_float(parsed.get(
+                    "readiness_score"), fallback["readiness_score"]))),
                 2,
             ),
             "pace_multiplier": round(
-                max(0.75, min(1.2, safe_float(parsed.get("pace_multiplier"), fallback["pace_multiplier"]))),
+                max(0.75, min(1.2, safe_float(parsed.get(
+                    "pace_multiplier"), fallback["pace_multiplier"]))),
                 2,
             ),
             "weighted_minutes": max(
                 10,
                 min(
-                    safe_integer(parsed.get("weighted_minutes"), fallback["weighted_minutes"]),
+                    safe_integer(parsed.get("weighted_minutes"),
+                                 fallback["weighted_minutes"]),
                     180,
                 ),
             ),
@@ -954,14 +960,10 @@ async def build_plan_response(
             "Revision"
         )
 
-    support_profile = await build_support_profile(
-        prompt=prompt,
+    support_profile = build_heuristic_support_profile(
         learning_level=learning_level,
         study_mood=study_mood,
         study_minutes_per_day=study_minutes_per_day,
-        learning_styles=selected_learning_styles,
-        raw_text=raw_text,
-        file_names=file_names,
     )
 
     weighted_study_minutes = support_profile.get(
@@ -1032,67 +1034,197 @@ async def build_plan_with_gemma(
     )
 
     if GEMINI_CLIENT is None:
+        print(
+            "GEMINI_API_KEY is not configured. "
+            "Using placeholder roadmap."
+        )
         return placeholder_plan
 
     calendar_dates = get_date_range(
         start_date,
         deadline,
     )
+
     date_list = "\n".join(
         (
-            f"- Day {index}: {study_date.isoformat()} ({study_date.strftime('%A')})"
+            f"- Day {index}: "
+            f"{study_date.isoformat()} "
+            f"({study_date.strftime('%A')})"
         )
         for index, study_date in enumerate(
             calendar_dates,
             start=1,
         )
     )
-    source_files = ", ".join(file_names) if file_names else "No filenames supplied"
+
+    source_files = (
+        ", ".join(file_names)
+        if file_names
+        else "No filenames supplied"
+    )
+
     support_profile_text = (
         f"Level: {support_profile['level_label']}\n"
         f"Mood: {support_profile['mood_label']}\n"
-        f"Readiness score: {support_profile['readiness_score']}\n"
-        f"Pace multiplier: {support_profile['pace_multiplier']}\n"
-        f"Weighted minutes: {support_profile['weighted_minutes']}\n"
-        f"Support mode: {support_profile['support_mode']}\n"
-        f"Recommendations: {', '.join(support_profile['recommendations'])}"
+        f"Readiness score: "
+        f"{support_profile['readiness_score']}\n"
+        f"Pace multiplier: "
+        f"{support_profile['pace_multiplier']}\n"
+        f"Weighted minutes: "
+        f"{support_profile['weighted_minutes']}\n"
+        f"Support mode: "
+        f"{support_profile['support_mode']}\n"
+        f"Recommendations: "
+        f"{', '.join(support_profile['recommendations'])}"
     )
 
-    system_instruction = (
-        "You are ZEN, a supportive study companion. "
-        "Create a realistic dated study roadmap and return valid JSON only. "
-        f"Adapt the plan to these learning styles: {', '.join(learning_styles) if learning_styles else 'balanced mix'}. "
-        "Use the learner support profile to tune pace, reassurance and challenge."
-    )
+    system_instruction = """
+You are ZEN, an expert study-planning assistant.
+
+Create a realistic dated study roadmap using only the supplied
+lecture material.
+
+You must identify real concepts, definitions, processes and examples
+from the uploaded lecture slides.
+
+Do not use filenames, file extensions, slide numbers or metadata as
+course topics.
+
+Do not invent unrelated information.
+
+Each roadmap day must include a concise lesson and exactly three quiz
+questions based on what was taught.
+
+Return valid JSON only. Do not include markdown fences or commentary.
+"""
+
     user_prompt = f"""
+Create a study roadmap using ONLY the lecture material below.
+
 LEARNER REQUEST:
-{prompt.strip() or 'Help me make steady progress.'}
+{prompt.strip() or "Help me understand the uploaded lecture material."}
 
-ROADMAP START DATE:
-{start_date.isoformat()}
+DATES:
+{start_date.isoformat()} to {deadline.isoformat()}
 
-FINAL DEADLINE:
-{deadline.isoformat()}
-
-STUDY TIME PER DAY:
-{study_minutes} minutes
+AVAILABLE STUDY TIME:
+{study_minutes} minutes per day
 
 LEARNER SUPPORT PROFILE:
 {support_profile_text}
 
+LEARNING STYLES:
+{", ".join(learning_styles) if learning_styles else "balanced"}
+
 SOURCE FILES:
 {source_files}
 
-MANDATORY ROADMAP DATES:
+REQUIRED ROADMAP DAYS:
 {date_list}
 
-COURSE MATERIAL:
---- START MATERIAL ---
-{raw_text[:12000]}
---- END MATERIAL ---
+LECTURE MATERIAL:
+--- START OF LECTURE MATERIAL ---
+{raw_text[:18000]}
+--- END OF LECTURE MATERIAL ---
+
+Return exactly one JSON object using this structure:
+
+{{
+  "course_title": "Specific title based on the lecture slides",
+  "course_summary": "Brief description of the uploaded material",
+  "learner_goal": "The learner's goal",
+  "focus_topics": [
+    "Specific topic found in the slides"
+  ],
+  "roadmap": [
+    {{
+      "day": 1,
+      "study_date": "YYYY-MM-DD",
+      "title": "Specific lesson title based on the slides",
+      "estimated_minutes": {study_minutes},
+      "topics": [
+        "Specific topic from the lecture material"
+      ],
+      "objectives": [
+        "Specific objective based on the lecture material",
+        "Another specific objective"
+      ],
+      "lesson": {{
+        "introduction": "Short introduction",
+        "explanation": "Concise explanation based on the slides",
+        "example": "Concrete example based on the slides",
+        "recap": [
+          "Key point one",
+          "Key point two",
+          "Key point three"
+        ]
+      }},
+      "quiz": [
+        {{
+          "id": "day-1-q-1",
+          "topic": "Topic being tested",
+          "question": "Question based on the uploaded material",
+          "options": [
+            "Option one",
+            "Option two",
+            "Option three",
+            "Option four"
+          ],
+          "correct_answer": 0,
+          "explanation": "Why the correct answer is correct"
+        }},
+        {{
+          "id": "day-1-q-2",
+          "topic": "Topic being tested",
+          "question": "Question based on the uploaded material",
+          "options": [
+            "Option one",
+            "Option two",
+            "Option three",
+            "Option four"
+          ],
+          "correct_answer": 1,
+          "explanation": "Why the correct answer is correct"
+        }},
+        {{
+          "id": "day-1-q-3",
+          "topic": "Topic being tested",
+          "question": "Question based on the uploaded material",
+          "options": [
+            "Option one",
+            "Option two",
+            "Option three",
+            "Option four"
+          ],
+          "correct_answer": 2,
+          "explanation": "Why the correct answer is correct"
+        }}
+      ]
+    }}
+  ]
+}}
+
+Rules:
+
+1. Create exactly one roadmap entry for every required date.
+2. Keep the roadmap entries in the same order as the required dates.
+3. Use only facts and topics found in the lecture material.
+4. Never use filenames, extensions or slide numbers as topics.
+5. Create exactly three quiz questions per day.
+6. Every quiz question must have exactly four options.
+7. correct_answer must be an integer from 0 to 3.
+8. Keep each lesson short enough to complete within {study_minutes} minutes.
+9. The quiz must test ideas taught in that day's lesson.
+10. Return JSON only.
 """
 
     try:
+        print(
+            "Sending extracted lecture material to Gemma:",
+            len(raw_text),
+            "characters",
+        )
+
         response = await asyncio.wait_for(
             asyncio.to_thread(
                 GEMINI_CLIENT.models.generate_content,
@@ -1100,11 +1232,19 @@ COURSE MATERIAL:
                 contents=user_prompt,
                 config=types.GenerateContentConfig(
                     system_instruction=system_instruction,
-                    temperature=0.2,
+                    temperature=0.1,
+                    response_mime_type="application/json",
                 ),
             ),
             timeout=GEMINI_ROADMAP_TIMEOUT_SECONDS,
         )
+
+        print(
+            "Gemma response received:",
+            len(response.text or ""),
+            "characters",
+        )
+
         parsed_plan = parse_plan_response(
             raw_response=response.text or "",
             study_minutes=study_minutes,
@@ -1112,32 +1252,36 @@ COURSE MATERIAL:
             start_date=start_date,
             deadline=deadline,
         )
+
         if parsed_plan is not None:
-            merged_plan = dict(placeholder_plan)
-            merged_plan.update(
-                {
-                    key: value
-                    for key, value in parsed_plan.items()
-                    if key
-                    in {
-                        "summary",
-                        "focus_topics",
-                        "study_blocks",
-                        "minimum_win",
-                        "motivation_note",
-                        "custom_prompt",
-                        "daily_time",
-                    }
-                }
+            print(
+                "Gemma roadmap generated successfully:",
+                len(
+                    parsed_plan.get(
+                        "roadmap",
+                        [],
+                    )
+                ),
+                "days",
             )
-            return merged_plan
+
+            return parsed_plan
+
+        print(
+            "Gemma returned an invalid roadmap. "
+            "Using placeholder roadmap."
+        )
+
     except asyncio.TimeoutError:
         print(
-            f"Gemma roadmap request timed out after {GEMINI_ROADMAP_TIMEOUT_SECONDS} seconds."
+            "Gemma roadmap request timed out after "
+            f"{GEMINI_ROADMAP_TIMEOUT_SECONDS} seconds."
         )
 
     except Exception as exc:
-        print(f"Gemma roadmap request failed: {exc!r}")
+        print(
+            f"Gemma roadmap request failed: {exc!r}"
+        )
 
     return placeholder_plan
 
@@ -1785,67 +1929,83 @@ def decorate_plan_with_learning_styles(
     plan: dict[str, Any],
     learning_styles: List[str],
 ) -> dict[str, Any]:
-    selected = normalize_learning_styles(learning_styles)
-    roadmap = plan.get("roadmap", [])
+    selected = normalize_learning_styles(
+        learning_styles
+    )
 
-    for day_number, day in enumerate(roadmap, start=1):
-        style_key = selected[(day_number - 1) % len(selected)]
-        topic = day.get("topics", ["the topic"])[0]
+    roadmap = plan.get(
+        "roadmap",
+        [],
+    )
+
+    if not isinstance(
+        roadmap,
+        list,
+    ):
+        roadmap = []
+
+    for day_number, day in enumerate(
+        roadmap,
+        start=1,
+    ):
+        if not isinstance(day, dict):
+            continue
+
+        style_key = selected[
+            (day_number - 1) % len(selected)
+        ]
+
+        topics = day.get(
+            "topics",
+            [],
+        )
+
+        if not isinstance(topics, list):
+            topics = []
+
+        topic = (
+            str(topics[0])
+            if topics
+            else "the topic"
+        )
 
         day["style_key"] = style_key
+
         day["style_label"] = (
             "Balanced"
             if style_key == "balanced"
-            else LEARNING_STYLE_LIBRARY[style_key]["label"]
+            else LEARNING_STYLE_LIBRARY[
+                style_key
+            ]["label"]
         )
+
         day["style_hint"] = build_style_hint(
             style_key,
             topic,
         )
 
-        objectives = list(day.get("objectives", []))
-        if objectives:
-            objectives[0] = build_style_objective(
-                style_key,
-                topic,
-            )
-            day["objectives"] = objectives
+        lesson = day.get(
+            "lesson",
+            {},
+        )
 
-        lesson = day.get("lesson", {})
         if isinstance(lesson, dict):
-            lesson["explanation"] = (
-                f"Use a {day['style_label'].lower()} approach to study {topic}. "
-                f"{day['style_hint']}"
+            # Keep Gemma's original explanation.
+            # Only add the learning-style hint.
+            lesson["style_hint"] = (
+                day["style_hint"]
             )
+
             day["lesson"] = lesson
 
-        quiz_items = day.get("quiz", [])
-        if isinstance(quiz_items, list) and quiz_items:
-            quiz_items[0]["explanation"] = (
-                f"This question fits a {day['style_label'].lower()} review style."
-            )
-            day["quiz"] = quiz_items
-
+    plan["roadmap"] = roadmap
     plan["learning_styles"] = selected
-    plan["learning_style_guidance"] = build_learning_style_guidance(
-        selected
-    )
 
-    if plan.get("study_blocks"):
-        study_blocks = list(plan["study_blocks"])
-        for index, block in enumerate(study_blocks):
-            style_key = selected[index % len(selected)]
-            style_label = (
-                "Balanced"
-                if style_key == "balanced"
-                else LEARNING_STYLE_LIBRARY[style_key]["label"]
-            )
-            block["style_label"] = style_label
-            block["style_hint"] = build_style_hint(
-                style_key,
-                str(block.get("focus", "the topic")),
-            )
-        plan["study_blocks"] = study_blocks
+    plan["learning_style_guidance"] = (
+        build_learning_style_guidance(
+            selected
+        )
+    )
 
     return plan
 
@@ -1951,7 +2111,8 @@ async def build_chat_response(
                 asyncio.to_thread(chat.send_message, follow_up_prompt),
                 timeout=GEMINI_CHAT_TIMEOUT_SECONDS,
             )
-            follow_up_reply = clean_chat_response_text(second_response.text or "")
+            follow_up_reply = clean_chat_response_text(
+                second_response.text or "")
 
         return {
             "first_reply": (
@@ -2582,7 +2743,7 @@ async def extract_text_from_upload(
 def extract_text_from_pptx(
     presentation: Any,
 ) -> str:
-    text_parts: list[str] = []
+    slide_sections: list[str] = []
 
     for slide_number, slide in enumerate(
         presentation.slides,
@@ -2605,17 +2766,42 @@ def extract_text_from_pptx(
                     shape_text.strip()
                 )
 
+            if getattr(
+                shape,
+                "has_table",
+                False,
+            ):
+                for row in shape.table.rows:
+                    cells = [
+                        cell.text.strip()
+                        for cell in row.cells
+                        if cell.text.strip()
+                    ]
+
+                    if cells:
+                        slide_parts.append(
+                            " | ".join(cells)
+                        )
+
         if slide_parts:
-            text_parts.append(
+            slide_sections.append(
                 f"SLIDE {slide_number}\n"
-                + "\n".join(
-                    slide_parts
-                )
+                + "\n".join(slide_parts)
             )
 
-    return "\n\n".join(
-        text_parts
+    extracted_text = "\n\n".join(
+        slide_sections
     )
+
+    print(
+        "PowerPoint extraction:",
+        len(presentation.slides),
+        "slides,",
+        len(extracted_text),
+        "characters",
+    )
+
+    return extracted_text
 
 
 def load_demo_text_from_folder() -> str:
