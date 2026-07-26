@@ -1262,6 +1262,40 @@ input[type="file"]::file-selector-button:hover {
   line-height: 1.45;
 }
 
+.breathing-link-arrow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  width: 36px;
+  height: 36px;
+  margin-top: 10px;
+
+  border: 1.5px solid var(--paper-dark);
+  border-radius: 999px;
+
+  color: var(--ink);
+  background: var(--paper-light);
+
+  font-family: "Patrick Hand", cursive;
+  font-size: 1.4rem;
+  line-height: 1;
+  text-decoration: none;
+
+  transition:
+    transform 150ms ease,
+    box-shadow 150ms ease,
+    background-color 150ms ease;
+}
+
+.breathing-link-arrow:hover,
+.breathing-link-arrow:focus-visible {
+  transform: translate(-1px, -1px);
+  box-shadow: 3px 3px 0 rgba(31, 33, 31, 0.18);
+  background: #ffffff;
+  outline: none;
+}
+
 /* ---------------------------------------------------------
    Scrollbars
 --------------------------------------------------------- */
@@ -1623,41 +1657,32 @@ input[type="file"]::file-selector-button:hover {
   background: var(--paper-light);
 }
 
-.mini-calendar-page {
-  width: 58px;
-  min-height: 66px;
+.roadmap-window-calendar {
+  width: 92px;
+  min-height: 92px;
 
-  display: flex;
-  flex-direction: column;
   flex: 0 0 auto;
-
-  border: 1.5px solid var(--ink);
-  border-radius: 3px 9px 4px 8px;
-
-  background: var(--paper-light);
-  transform: rotate(-1deg);
 }
 
-.mini-calendar-month {
-  padding: 5px;
+.roadmap-window-calendar .calendar-month {
+  padding-top: 11px;
 
-  color: var(--paper-light);
-  background: var(--ink);
-
-  font-family: "Patrick Hand", cursive;
-  font-size: 0.8rem;
-  text-align: center;
+  font-size: 0.84rem;
+  letter-spacing: 0.14em;
 }
 
-.mini-calendar-number {
-  flex: 1;
+.roadmap-window-calendar .calendar-day {
+  font-size: 1.9rem;
+}
 
-  display: grid;
-  place-items: center;
+.roadmap-window-note {
+  width: 100%;
 
-  font-family: "Patrick Hand", cursive;
-  font-size: 1.65rem;
-  font-weight: 400;
+  color: var(--ink-faint);
+
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
 }
 
 .roadmap-date-copy {
@@ -1690,6 +1715,263 @@ input[type="file"]::file-selector-button:hover {
   font-size: 0.68rem;
   text-transform: uppercase;
   letter-spacing: 0.08em;
+}
+
+/* ---------------------------------------------------------
+   Breathing reset
+--------------------------------------------------------- */
+
+.breathing-page {
+  min-height: 100vh;
+}
+
+.breathing-back-button {
+  min-width: 210px;
+  padding: 12px 16px;
+
+  display: grid;
+  gap: 3px;
+
+  border: 1.5px solid var(--ink);
+  border-radius: 8px 18px 9px 17px;
+
+  color: var(--ink);
+  background: linear-gradient(180deg, rgba(251, 250, 246, 0.98), rgba(244, 242, 235, 0.95));
+  box-shadow: 4px 4px 0 var(--paper-dark);
+
+  text-align: left;
+}
+
+.breathing-back-button:hover {
+  transform: translate(1px, 1px);
+  box-shadow: 3px 3px 0 var(--paper-dark);
+}
+
+.breathing-back-button:active {
+  transform: translate(4px, 4px);
+  box-shadow: none;
+}
+
+.breathing-back-kicker,
+.breathing-back-subtext {
+  color: var(--ink-faint);
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.breathing-back-button strong {
+  font-family: "Patrick Hand", cursive;
+  font-size: 1.25rem;
+  font-weight: 400;
+}
+
+.breathing-back-subtext {
+  letter-spacing: 0.04em;
+  text-transform: none;
+}
+
+.breathing-shell {
+  min-height: calc(100vh - 120px);
+  padding: 24px;
+
+  display: grid;
+  grid-template-columns: minmax(280px, 0.95fr) minmax(320px, 1.05fr);
+  gap: 24px;
+  align-items: center;
+}
+
+.breathing-copy {
+  padding: 28px;
+
+  border: 1.5px solid var(--ink);
+  border-radius: 10px 22px 10px 20px;
+
+  background: rgba(251, 250, 246, 0.96);
+  box-shadow: var(--shadow);
+}
+
+.breathing-copy h2 {
+  margin: 6px 0 14px;
+
+  font-family: "Patrick Hand", cursive;
+  font-size: 2.5rem;
+  font-weight: 400;
+}
+
+.breathing-copy p {
+  color: var(--ink-soft);
+  line-height: 1.6;
+}
+
+.breathing-stats {
+  margin-top: 22px;
+
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.breathing-stats div {
+  padding: 16px;
+
+  border: 1.5px solid var(--ink);
+  border-radius: 6px 16px 8px 14px;
+  background: var(--paper-light);
+}
+
+.breathing-stats strong {
+  display: block;
+
+  font-family: "Patrick Hand", cursive;
+  font-size: 1.7rem;
+  font-weight: 400;
+}
+
+.breathing-stats span {
+  color: var(--ink-faint);
+  font-size: 0.78rem;
+}
+
+.breathing-actions {
+  margin-top: 20px;
+
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.breathing-button {
+  min-width: 148px;
+}
+
+.breathing-note {
+  margin-top: 16px;
+  padding-top: 16px;
+
+  border-top: 1px dashed var(--line-dark);
+}
+
+.breathing-stage {
+  min-height: 520px;
+
+  display: grid;
+  place-items: center;
+}
+
+.breathing-orbit {
+  position: relative;
+
+  width: min(78vw, 440px);
+  aspect-ratio: 1;
+
+  display: grid;
+  place-items: center;
+}
+
+.breathing-ring {
+  position: absolute;
+  inset: 0;
+
+  border: 1.5px solid rgba(31, 33, 31, 0.14);
+  border-radius: 50%;
+}
+
+.breathing-ring.ring-1 {
+  transform: scale(0.84);
+}
+
+.breathing-ring.ring-2 {
+  transform: scale(0.66);
+}
+
+.breathing-ring.ring-3 {
+  transform: scale(0.48);
+}
+
+.breathing-core {
+  --breath-scale: 1;
+  --breath-tint: #436371;
+
+  width: 48%;
+  aspect-ratio: 1;
+
+  display: grid;
+  place-items: center;
+
+  border: 1.5px solid var(--ink);
+  border-radius: 50%;
+  background: radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0.6));
+  box-shadow: 0 18px 40px rgba(31, 33, 31, 0.12);
+
+  transform: scale(var(--breath-scale));
+  transition: transform 1000ms ease, background-color 1000ms ease, border-color 1000ms ease;
+}
+
+.breathing-core span {
+  max-width: 80%;
+
+  color: var(--ink);
+  font-family: "Patrick Hand", cursive;
+  font-size: 1.8rem;
+  text-align: center;
+}
+
+.breathing-core::before {
+  content: "";
+
+  position: absolute;
+  inset: 12%;
+
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--breath-tint) 16%, transparent);
+  opacity: 0.55;
+  filter: blur(3px);
+}
+
+.breathing-stage::after {
+  content: "";
+
+  position: absolute;
+  width: min(90vw, 520px);
+  height: min(90vw, 520px);
+
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(67, 99, 113, 0.08), transparent 65%);
+  filter: blur(12px);
+  z-index: -1;
+}
+
+@media (max-width: 900px) {
+  .breathing-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .breathing-stage {
+    min-height: 420px;
+  }
+}
+
+@media (max-width: 600px) {
+  .breathing-shell {
+    padding: 12px;
+  }
+
+  .breathing-copy {
+    padding: 20px;
+  }
+
+  .breathing-copy h2 {
+    font-size: 2rem;
+  }
+
+  .breathing-stats {
+    grid-template-columns: 1fr;
+  }
+
+  .breathing-orbit {
+    width: min(86vw, 360px);
+  }
 }
 
 /* ---------------------------------------------------------

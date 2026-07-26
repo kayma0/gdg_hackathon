@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <title>ZEN Breathing Reset</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Patrick+Hand&display=swap"
+    rel="stylesheet" />
+
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+
+<body>
+  <main class="zen-app breathing-page">
+    <header class="topbar">
+      <a href="/" class="brand">
+        <div class="brand-mark">Z</div>
+
+        <div>
+          <h1>ZEN</h1>
+          <p>Your adaptive study companion</p>
+        </div>
+      </a>
+
+      <div class="topbar-actions">
+        <button type="button" class="breathing-back-button" id="breathing-back-button" data-back-url="/plan/latest">
+          <span class="breathing-back-kicker">Return</span>
+          <strong>Back to roadmap</strong>
+          <span class="breathing-back-subtext">Continue your study plan</span>
+        </button>
+      </div>
+    </header>
+
+    <section class="breathing-shell">
+      <div class="breathing-copy">
+        <p class="section-label">ZEN focus</p>
+        <h2>2-minute breathing reset</h2>
+        <p>
+          Use this short breathing exercise to slow your body down and help students settle anxious energy before studying.
+        </p>
+
+        <div class="breathing-stats">
+          <div>
+            <strong id="breath-phase">Breathe in</strong>
+            <span>Current phase</span>
+          </div>
+
+          <div>
+            <strong id="breath-time-left">02:00</strong>
+            <span>Time left</span>
+          </div>
+        </div>
+
+        <div class="breathing-actions">
+          <button type="button" class="submit-button breathing-button" id="breath-toggle">
+            Pause
+          </button>
+
+          <button type="button" class="quick-action" id="breath-restart">
+            Restart 2 minutes
+          </button>
+        </div>
+
+        <p class="breathing-note">
+          Inhale for 3 seconds, hold for 2, exhale for 5. The full cycle repeats for 2 minutes.
+        </p>
+      </div>
+
+      <div class="breathing-stage" aria-label="Animated breathing circles">
+        <div class="breathing-orbit">
+          <div class="breathing-ring ring-1"></div>
+          <div class="breathing-ring ring-2"></div>
+          <div class="breathing-ring ring-3"></div>
+          <div class="breathing-core" id="breathing-core">
+            <span id="breathing-core-label">Breathe in</span>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const phaseLabel = document.getElementById("breath-phase");
+    const timeLeftLabel = document.getElementById("breath-time-left");
+    const core = document.getElementById("breathing-core");
+    const coreLabel = document.getElementById("breathing-core-label");
+    const backButton = document.getElementById("breathing-back-button");
+    const toggleButton = document.getElementById("breath-toggle");
+    const restartButton = document.getElementById("breath-restart");
+
+    const cycle = [
+      { label: "Breathe in", seconds: 3, scale: 1.15, tint: "#436371" },
+      { label: "Hold", seconds: 2, scale: 1.15, tint: "#5c706a" },
+      { label: "Breathe out", seconds: 5, scale: 0.86, tint: "#8d8f8a" },
+    ];
+
+    let phaseIndex = 0;
+    let phaseRemaining = cycle[0].seconds;
+    let totalRemaining = 120;
+    let running = true;
+
+    function formatTime(seconds) {
+      const minutes = String(Math.floor(seconds / 60)).padStart(2, "0");
+      const remainder = String(seconds % 60).padStart(2, "0");
+      return `${minutes}:${remainder}`;
+    }
+
+    function renderPhase() {
+      const current = cycle[phaseIndex];
+      phaseLabel.textContent = current.label;
+      coreLabel.textContent = current.label;
+      core.style.setProperty("--breath-scale", String(current.scale));
+      core.style.setProperty("--breath-tint", current.tint);
+    }
+
+    function resetSession() {
+      phaseIndex = 0;
+      phaseRemaining = cycle[0].seconds;
+      totalRemaining = 120;
+      running = true;
+      toggleButton.textContent = "Pause";
+      renderPhase();
+      timeLeftLabel.textContent = formatTime(totalRemaining);
+    }
+
+    function advancePhase() {
+      phaseIndex = (phaseIndex + 1) % cycle.length;
+      phaseRemaining = cycle[phaseIndex].seconds;
+      renderPhase();
+    }
+
+    renderPhase();
+    timeLeftLabel.textContent = formatTime(totalRemaining);
+
+    const timer = setInterval(() => {
+      if (!running) return;
+
+      totalRemaining = Math.max(0, totalRemaining - 1);
+      phaseRemaining = Math.max(0, phaseRemaining - 1);
+
+      timeLeftLabel.textContent = formatTime(totalRemaining);
+
+      if (phaseRemaining === 0 && totalRemaining > 0) {
+        advancePhase();
+      }
+
+      if (totalRemaining === 0) {
+        running = false;
+        toggleButton.textContent = "Finished";
+        phaseLabel.textContent = "Done";
+        coreLabel.textContent = "Well done";
+        core.style.setProperty("--breath-scale", "1");
+        core.style.setProperty("--breath-tint", "#1f211f");
+        clearInterval(timer);
+      }
+    }, 1000);
+
+    toggleButton.addEventListener("click", () => {
+      if (totalRemaining === 0) return;
+
+      running = !running;
+      toggleButton.textContent = running ? "Pause" : "Resume";
+    });
+
+    restartButton.addEventListener("click", () => {
+      resetSession();
+    });
+
+    backButton.addEventListener("click", () => {
+      window.location.href = backButton.dataset.backUrl || "/plan/latest";
+    });
+  </script>
+</body>
+
+</html>

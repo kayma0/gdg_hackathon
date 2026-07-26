@@ -19,7 +19,7 @@ from fastapi import (
     Request,
     UploadFile,
 )
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from google import genai
@@ -78,6 +78,9 @@ app.mount(
 templates = Jinja2Templates(
     directory=BASE_DIR / "templates"
 )
+
+
+LAST_PLAN_TEMPLATE_CONTEXT: dict[str, Any] | None = None
 
 
 class LessonRequest(BaseModel):
@@ -363,27 +366,23 @@ async def create_plan_page(
         uploaded_files=uploaded_files,
     )
 
+    template_context = {
+        "plan": plan_data["plan"],
+        "file_names": plan_data["file_names"],
+        "material_context": plan_data["material_context"],
+        "learning_styles": plan_data["learning_styles"],
+        "study_minutes_per_day": study_minutes_per_day,
+        "start_date": start_date,
+        "deadline": deadline,
+    }
+
+    global LAST_PLAN_TEMPLATE_CONTEXT
+    LAST_PLAN_TEMPLATE_CONTEXT = template_context
+
     return templates.TemplateResponse(
         request,
         "plan.html",
-        {
-            "request": request,
-            "plan": plan_data["plan"],
-            "file_names": plan_data[
-                "file_names"
-            ],
-            "material_context": plan_data[
-                "material_context"
-            ],
-            "learning_styles": plan_data[
-                "learning_styles"
-            ],
-            "study_minutes_per_day": (
-                study_minutes_per_day
-            ),
-            "start_date": start_date,
-            "deadline": deadline,
-        },
+        {"request": request, **template_context},
     )
 
 
@@ -414,6 +413,42 @@ async def generate_plan_api(
     )
 
     return JSONResponse(plan_data)
+
+
+@app.get(
+    "/breathing-exercise",
+    response_class=HTMLResponse,
+)
+async def breathing_exercise_page(
+    request: Request,
+) -> HTMLResponse:
+    return templates.TemplateResponse(
+        request,
+        "breathing.html",
+        {
+            "request": request,
+        },
+    )
+
+
+@app.get(
+    "/plan/latest",
+    response_class=HTMLResponse,
+)
+async def latest_plan_page(
+    request: Request,
+) -> HTMLResponse:
+    if LAST_PLAN_TEMPLATE_CONTEXT is None:
+        return RedirectResponse(url="/", status_code=303)
+
+    return templates.TemplateResponse(
+        request,
+        "plan.html",
+        {
+            "request": request,
+            **LAST_PLAN_TEMPLATE_CONTEXT,
+        },
+    )
 
 
 # ---------------------------------------------------------

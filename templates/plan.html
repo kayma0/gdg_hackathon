@@ -194,14 +194,19 @@
         </div>
 
         <div class="roadmap-date-window">
-          <div class="mini-calendar-page">
-            <span class="mini-calendar-month">
-              {{ plan.start_month }}
-            </span>
+          <div class="calendar-paper-icon roadmap-window-calendar" aria-hidden="true">
+            <div class="calendar-binding">
+              <span></span>
+              <span></span>
+            </div>
 
-            <strong class="mini-calendar-number">
-              {{ plan.start_day_number }}
-            </strong>
+            <div class="calendar-month">
+              WINDOW
+            </div>
+
+            <div class="calendar-day">
+              {{ plan.total_days }}
+            </div>
           </div>
 
           <div class="roadmap-date-copy">
@@ -216,6 +221,10 @@
             <strong>
               {{ plan.deadline_display_date }}
             </strong>
+
+            <span class="roadmap-window-note">
+              {{ plan.total_days }} calendar day{{ '' if plan.total_days == 1 else 's' }} available
+            </span>
           </div>
         </div>
 
@@ -353,6 +362,10 @@
               Complete one focused learning level today. Gemma will generate
               the lesson and quiz from the roadmap topics you selected.
             </p>
+
+            <a class="breathing-link-arrow" href="/breathing-exercise" aria-label="Open the 2-minute breathing reset">
+              →
+            </a>
           </div>
         </section>
       </aside>
