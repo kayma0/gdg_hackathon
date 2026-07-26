@@ -4,3 +4,5 @@ python-multipart
 python-pptx
 python-docx
 jinja2
+python-dotenv
+google-genai

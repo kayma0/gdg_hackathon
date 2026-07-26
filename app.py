@@ -1,16 +1,21 @@
 from __future__ import annotations
 
+import json
+import os
 import math
 import re
 from io import BytesIO
 from pathlib import Path
 from typing import List
+from google import genai
+from google.genai import types
 
 from docx import Document
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from dotenv import load_dotenv
 from pptx import Presentation
 
 
@@ -19,6 +24,15 @@ from pptx import Presentation
 # ---------------------------------------------------------
 
 BASE_DIR = Path(__file__).resolve().parent
+load_dotenv(BASE_DIR / ".env")
+
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
+GEMINI_MODEL = "gemma-4-26b-a4b-it"
+GEMINI_CLIENT = genai.Client() if GEMINI_API_KEY else None
+
+app = FastAPI(title="Study Sprint MVP", version="0.1.0")
+app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
+templates = Jinja2Templates(directory=BASE_DIR / "templates")
 
 app = FastAPI(
     title="ZEN Study Companion",
@@ -120,6 +134,15 @@ async def generate_plan_api(
     return JSONResponse(plan_data)
 
 
+@app.post("/api/chat")
+async def generate_chat_api(
+    message: str = Form(...),
+    follow_up: str = Form(default=""),
+) -> JSONResponse:
+    chat_data = await build_chat_response(message=message, follow_up=follow_up)
+    return JSONResponse(chat_data)
+
+
 # ---------------------------------------------------------
 # Chat placeholder route
 # ---------------------------------------------------------
@@ -211,6 +234,7 @@ async def build_plan_response(
     # TEMPORARY:
     # Replace this function call with the Gemma function later.
     plan = generate_placeholder_plan(
+    plan=await build_plan_with_gemini(
         prompt=prompt,
         deadline=deadline,
         study_minutes_per_day=study_minutes_per_day,
@@ -218,7 +242,7 @@ async def build_plan_response(
         file_names=file_names,
     )
 
-    study_session = build_placeholder_study_session(
+    study_session=build_placeholder_study_session(
         plan["focus_topics"]
     )
 
@@ -233,18 +257,81 @@ async def build_plan_response(
 # File extraction
 # ---------------------------------------------------------
 
+async def build_plan_with_gemini(
+    prompt: str,
+    deadline: str,
+    study_minutes: int,
+    raw_text: str,
+    file_names: List[str],
+) -> dict:
+    if GEMINI_CLIENT is None:
+        return build_plan(prompt, deadline, study_minutes, raw_text, file_names)
+
+    try:
+        response=GEMINI_CLIENT.models.generate_content(
+            model=GEMINI_MODEL,
+            config=types.GenerateContentConfig(
+                thinking_config=types.ThinkingConfig(thinking_level="high"),
+                system_instruction=(
+                    "You are a terse but supportive study assistant. Return only valid JSON with keys: "
+                    "summary, focus_topics, study_blocks, minimum_win, motivation_note, custom_prompt, daily_time. "
+                    "focus_topics must be an array of short strings. study_blocks must be an array of objects with title, focus, time, and goal. "
+                    "Keep the plan practical, concise, and centered on progress over perfection."
+                )
+            ),
+            contents=(
+                "Create a study plan from the following input.\n"
+                f"Prompt: {prompt.strip() or 'Keep it small and realistic.'}\n"
+                f"Deadline: {deadline}\n"
+                f"Study time per day: {study_minutes} minutes\n"
+                f"Source files: {', '.join(file_names) if file_names else 'none'}\n"
+                f"Source text:\n{raw_text[:12000]}"
+            ),
+        )
+        plan=parse_plan_response(response.text or "", study_minutes)
+        if plan:
+            return plan
+    except Exception:
+        pass
+
+    return build_plan(prompt, deadline, study_minutes, raw_text, file_names)
+
+
+async def build_chat_response(message: str, follow_up: str="") -> dict:
+    if GEMINI_CLIENT is None:
+        return {
+            "first_reply": "GEMINI_API_KEY is not configured.",
+            "follow_up_reply": "",
+        }
+
+    try:
+        chat=GEMINI_CLIENT.chats.create(model=GEMINI_MODEL)
+        first_reply=chat.send_message(message).text or ""
+        follow_up_reply=chat.send_message(
+            follow_up).text if follow_up.strip() else ""
+        return {
+            "first_reply": first_reply,
+            "follow_up_reply": follow_up_reply or "",
+        }
+    except Exception:
+        return {
+            "first_reply": "Sorry, the Gemini chat request failed.",
+            "follow_up_reply": "",
+        }
+
+
 async def extract_text_from_upload(
     uploaded_file: UploadFile,
 ) -> str:
-    contents = await uploaded_file.read()
+    contents=await uploaded_file.read()
 
-    suffix = Path(
+    suffix=Path(
         uploaded_file.filename or ""
     ).suffix.lower()
 
     try:
         if suffix == ".pptx":
-            presentation = Presentation(
+            presentation=Presentation(
                 BytesIO(contents)
             )
 
@@ -253,7 +340,7 @@ async def extract_text_from_upload(
             )
 
         if suffix == ".docx":
-            document = Document(
+            document=Document(
                 BytesIO(contents)
             )
 
@@ -284,16 +371,16 @@ async def extract_text_from_upload(
 def extract_text_from_pptx(
     presentation: Presentation,
 ) -> str:
-    text_parts: list[str] = []
+    text_parts: list[str]=[]
 
     for slide_number, slide in enumerate(
         presentation.slides,
         start=1,
     ):
-        slide_parts: list[str] = []
+        slide_parts: list[str]=[]
 
         for shape in slide.shapes:
-            shape_text = getattr(
+            shape_text=getattr(
                 shape,
                 "text",
                 "",
@@ -314,41 +401,41 @@ def extract_text_from_pptx(
 
 
 def load_demo_text_from_folder() -> str:
-    material_dir = BASE_DIR / "study_material"
+    material_dir=BASE_DIR / "study_material"
 
     if not material_dir.exists():
         return ""
 
-    collected: list[str] = []
+    collected: list[str]=[]
 
     for file_path in sorted(
         material_dir.glob("*")
     ):
-        suffix = file_path.suffix.lower()
+        suffix=file_path.suffix.lower()
 
         try:
             if suffix == ".pptx":
-                presentation = Presentation(
+                presentation=Presentation(
                     str(file_path)
                 )
 
-                text = extract_text_from_pptx(
+                text=extract_text_from_pptx(
                     presentation
                 )
 
             elif suffix == ".docx":
-                document = Document(
+                document=Document(
                     str(file_path)
                 )
 
-                text = "\n".join(
+                text="\n".join(
                     paragraph.text.strip()
                     for paragraph in document.paragraphs
                     if paragraph.text.strip()
                 )
 
             elif suffix == ".txt":
-                text = file_path.read_text(
+                text=file_path.read_text(
                     encoding="utf-8",
                     errors="ignore",
                 )
@@ -391,30 +478,30 @@ def generate_placeholder_plan(
     The returned dictionary should keep the same structure.
     """
 
-    topics = extract_placeholder_topics(
+    topics=extract_placeholder_topics(
         raw_text
     )
 
-    study_minutes = max(
+    study_minutes=max(
         10,
         min(study_minutes_per_day, 180),
     )
 
-    total_days = determine_placeholder_days(
+    total_days=determine_placeholder_days(
         deadline
     )
 
-    roadmap: list[dict] = []
+    roadmap: list[dict]=[]
 
     for day_number in range(
         1,
         total_days + 1,
     ):
-        topic = topics[
+        topic=topics[
             (day_number - 1) % len(topics)
         ]
 
-        next_topic = topics[
+        next_topic=topics[
             day_number % len(topics)
         ]
 
@@ -551,24 +638,24 @@ def generate_placeholder_plan(
             }
         )
 
-    source_label = (
+    source_label=(
         ", ".join(file_names[:2])
         if file_names
         else "your provided material"
     )
 
-    course_title = (
+    course_title=(
         topics[0].title()
         if topics
         else "Study Course"
     )
 
-    summary = (
+    summary=(
         f"ZEN created a {total_days}-day study "
         f"roadmap using {source_label}."
     )
 
-    study_blocks = [
+    study_blocks=[
         {
             "title": (
                 f"Day {day['day']}: "
@@ -631,6 +718,37 @@ def generate_placeholder_plan(
     }
 
 
+def parse_plan_response(raw_response: str, study_minutes: int) -> dict | None:
+    cleaned=raw_response.strip()
+    if cleaned.startswith("```"):
+        cleaned=re.sub(r"^```(?:json)?\s*", "", cleaned)
+        cleaned=re.sub(r"\s*```$", "", cleaned)
+
+    try:
+        parsed=json.loads(cleaned)
+    except json.JSONDecodeError:
+        return None
+
+    focus_topics=parsed.get("focus_topics")
+    study_blocks=parsed.get("study_blocks")
+    if not isinstance(focus_topics, list) or not isinstance(study_blocks, list):
+        return None
+    if not all(isinstance(topic, str) for topic in focus_topics):
+        return None
+    if not all(isinstance(block, dict) for block in study_blocks):
+        return None
+
+    return {
+        "summary": parsed.get("summary") if isinstance(parsed.get("summary"), str) else "Your study plan is ready.",
+        "focus_topics": focus_topics[:4],
+        "study_blocks": study_blocks[:4],
+        "minimum_win": parsed.get("minimum_win") if isinstance(parsed.get("minimum_win"), str) else "Spend 10 minutes reviewing the main topic.",
+        "motivation_note": parsed.get("motivation_note") if isinstance(parsed.get("motivation_note"), str) else "Start small and keep moving.",
+        "custom_prompt": parsed.get("custom_prompt") if isinstance(parsed.get("custom_prompt"), str) else "Keep it small and realistic.",
+        "daily_time": parsed.get("daily_time") if isinstance(parsed.get("daily_time"), str) else f"{study_minutes} minutes per day",
+    }
+
+
 def determine_placeholder_days(
     deadline: str,
 ) -> int:
@@ -640,7 +758,7 @@ def determine_placeholder_days(
     Gemma should decide the real learning structure later.
     """
 
-    match = re.search(
+    match=re.search(
         r"\d+",
         deadline or "",
     )
@@ -648,7 +766,7 @@ def determine_placeholder_days(
     if not match:
         return 4
 
-    requested_days = int(
+    requested_days=int(
         match.group()
     )
 
@@ -661,16 +779,16 @@ def determine_placeholder_days(
 def extract_placeholder_topics(
     raw_text: str,
 ) -> list[str]:
-    cleaned_lines: list[str] = []
+    cleaned_lines: list[str]=[]
 
     for line in raw_text.splitlines():
-        cleaned = re.sub(
+        cleaned=re.sub(
             r"\s+",
             " ",
             line,
         ).strip()
 
-        cleaned = re.sub(
+        cleaned=re.sub(
             r"[^A-Za-z0-9 /&()'-]",
             "",
             cleaned,
@@ -682,7 +800,7 @@ def extract_placeholder_topics(
         if len(cleaned) > 80:
             continue
 
-        lowered = cleaned.lower()
+        lowered=cleaned.lower()
 
         if lowered.startswith(
             (
@@ -695,16 +813,16 @@ def extract_placeholder_topics(
 
         cleaned_lines.append(cleaned)
 
-    topics: list[str] = []
-    seen: set[str] = set()
+    topics: list[str]=[]
+    seen: set[str]=set()
 
     for line in cleaned_lines:
-        lowered = line.lower()
+        lowered=line.lower()
 
         if lowered in seen:
             continue
 
-        word_count = len(
+        word_count=len(
             line.split()
         )
 
@@ -745,13 +863,13 @@ def build_day_title(
 def build_placeholder_study_session(
     topics: list[str],
 ) -> dict:
-    first_topic = (
+    first_topic=(
         topics[0]
         if topics
         else "the first topic"
     )
 
-    second_topic = (
+    second_topic=(
         topics[1]
         if len(topics) > 1
         else first_topic
