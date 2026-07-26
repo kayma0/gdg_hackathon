@@ -245,14 +245,41 @@ button {
   box-shadow: var(--shadow);
 }
 
+.chat-panel {
+  padding: 22px 22px 18px;
 
-  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
 .roadmap-header h2 {
   margin: 0;
 
   font-family: "Patrick Hand", cursive;
   font-size: 1.7rem;
   font-weight: 400;
+}
+
+.chat-header,
+.roadmap-header,
+.learning-style-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.chat-header {
+  margin-bottom: 10px;
+}
+
+.roadmap-header {
+  margin-bottom: 16px;
+}
+
+.learning-style-card-header {
+  margin-bottom: 8px;
 }
 
 .icon-button {
@@ -363,7 +390,8 @@ button {
 textarea,
 input[type="text"],
 input[type="number"],
-input[type="file"] {
+input[type="file"],
+select {
   width: 100%;
   padding: 13px 14px;
 
@@ -378,9 +406,23 @@ input[type="file"] {
 textarea:focus,
 input[type="text"]:focus,
 input[type="number"]:focus,
-input[type="file"]:focus {
+input[type="file"]:focus,
+select:focus {
   border-color: var(--ink);
   box-shadow: 3px 3px 0 var(--paper-dark);
+}
+
+select {
+  appearance: none;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--ink) 50%),
+    linear-gradient(135deg, var(--ink) 50%, transparent 50%);
+  background-position:
+    calc(100% - 21px) 50%,
+    calc(100% - 15px) 50%;
+  background-size: 6px 6px, 6px 6px;
+  background-repeat: no-repeat;
+  padding-right: 40px;
 }
 
 textarea {
@@ -521,7 +563,7 @@ input[type="file"]::file-selector-button:hover {
 .chat-messages {
   flex: 1;
   min-height: 0;
-  padding: 27px;
+  padding: 10px 4px 14px;
 
   overflow-y: auto;
   scroll-behavior: smooth;
@@ -537,8 +579,8 @@ input[type="file"]::file-selector-button:hover {
 .message-row {
   display: flex;
   align-items: flex-start;
-  gap: 11px;
-  margin-bottom: 25px;
+  gap: 12px;
+  margin-bottom: 20px;
 }
 
 .message-row.user-message {
@@ -553,7 +595,7 @@ input[type="file"]::file-selector-button:hover {
 }
 
 .message-content {
-  max-width: min(78%, 680px);
+  max-width: min(80%, 660px);
 }
 
 .user-message .message-content {
@@ -582,7 +624,7 @@ input[type="file"]::file-selector-button:hover {
 }
 
 .message-bubble {
-  padding: 15px 17px;
+  padding: 16px 18px;
 
   border: 1.5px solid var(--ink);
   border-radius: 4px 17px 6px 15px;
@@ -610,11 +652,11 @@ input[type="file"]::file-selector-button:hover {
 }
 
 .commitment-options {
-  margin-top: 12px;
+  margin-top: 11px;
 
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 9px;
 }
 
 .quick-action {
@@ -650,7 +692,7 @@ input[type="file"]::file-selector-button:hover {
 --------------------------------------------------------- */
 
 .typing-indicator {
-  padding: 0 27px 12px;
+  padding: 0 6px 12px;
 
   display: flex;
   align-items: center;
@@ -711,8 +753,8 @@ input[type="file"]::file-selector-button:hover {
 --------------------------------------------------------- */
 
 .chat-composer {
-  margin: 0 20px;
-  padding: 9px;
+  margin: 2px 0 0;
+  padding: 10px 11px;
 
   display: flex;
   align-items: flex-end;
@@ -748,7 +790,7 @@ input[type="file"]::file-selector-button:hover {
 #chat-input {
   width: 100%;
   max-height: 130px;
-  padding: 9px 4px;
+  padding: 8px 5px;
 
   resize: none;
   border: 0;
@@ -765,6 +807,8 @@ input[type="file"]::file-selector-button:hover {
 }
 
 .attachment-preview {
+  margin-top: 6px;
+
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
@@ -788,7 +832,7 @@ input[type="file"]::file-selector-button:hover {
 }
 
 .send-button {
-  min-width: 88px;
+  min-width: 94px;
   min-height: 40px;
   padding: 9px 14px;
 
@@ -818,7 +862,7 @@ input[type="file"]::file-selector-button:hover {
 }
 
 .chat-disclaimer {
-  margin: 9px 20px 14px;
+  margin: 10px 4px 0;
 
   color: var(--ink-faint);
   font-size: 0.65rem;
@@ -830,7 +874,7 @@ input[type="file"]::file-selector-button:hover {
 --------------------------------------------------------- */
 
 .roadmap-panel {
-  padding: 22px;
+  padding: 32px;
   overflow-y: auto;
 }
 
@@ -921,6 +965,18 @@ input[type="file"]::file-selector-button:hover {
   font-weight: 400;
 }
 
+.support-profile-note {
+  margin: 10px 0 0;
+
+  color: var(--ink-soft);
+  font-size: 0.72rem;
+  line-height: 1.45;
+}
+
+.support-profile-card .learning-style-highlight:nth-of-type(n + 3) {
+  display: none;
+}
+
 .learning-style-badge {
   padding: 5px 10px;
 
@@ -978,11 +1034,11 @@ input[type="file"]::file-selector-button:hover {
   margin-top: 18px;
 
   display: grid;
-  gap: 12px;
+  gap: 14px;
 }
 
 .roadmap-item {
-  padding: 14px;
+  padding: 16px 18px 16px 16px;
 
   display: flex;
   align-items: flex-start;
@@ -1005,6 +1061,31 @@ input[type="file"]::file-selector-button:hover {
 
 .roadmap-item.current:hover {
   transform: translate(-1px, -1px);
+}
+
+.roadmap-date-marker {
+  width: 50px;
+  min-height: 58px;
+  margin-right: 2px;
+}
+
+.roadmap-date-marker span {
+  padding: 4px 3px;
+
+  font-size: 0.68rem;
+}
+
+.roadmap-date-marker strong {
+  font-size: 1.45rem;
+}
+
+.roadmap-copy {
+  padding-top: 1px;
+  padding-right: 6px;
+}
+
+.roadmap-copy h3 {
+  margin-top: 7px;
 }
 
 .roadmap-style-note {
@@ -1490,7 +1571,7 @@ input[type="file"]::file-selector-button:hover {
 
 .roadmap-date-window {
   margin-top: 18px;
-  padding: 14px;
+  padding: 15px 16px;
 
   display: flex;
   align-items: center;
@@ -1505,7 +1586,6 @@ input[type="file"]::file-selector-button:hover {
 .mini-calendar-page {
   width: 58px;
   min-height: 66px;
-  overflow: hidden;
 
   display: flex;
   flex-direction: column;
@@ -1567,6 +1647,9 @@ input[type="file"]::file-selector-button:hover {
 
 .date-arrow {
   color: var(--ink-soft);
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
 }
 
 /* ---------------------------------------------------------
@@ -1578,8 +1661,8 @@ input[type="file"]::file-selector-button:hover {
 }
 
 .roadmap-date-marker {
-  width: 46px;
-  min-height: 54px;
+  width: 50px;
+  min-height: 58px;
   overflow: hidden;
 
   display: flex;
@@ -1593,7 +1676,7 @@ input[type="file"]::file-selector-button:hover {
 }
 
 .roadmap-date-marker span {
-  padding: 3px;
+  padding: 4px 3px;
 
   color: var(--paper-light);
   background: var(--ink);
@@ -1610,7 +1693,7 @@ input[type="file"]::file-selector-button:hover {
   place-items: center;
 
   font-family: "Patrick Hand", cursive;
-  font-size: 1.35rem;
+  font-size: 1.45rem;
   font-weight: 400;
 }
 
@@ -1641,6 +1724,29 @@ input[type="file"]::file-selector-button:hover {
 
   font-family: "Patrick Hand", cursive;
   font-size: 1rem;
+}
+
+.support-profile-card,
+.focus-card {
+  margin-top: 16px;
+}
+
+.support-profile-card {
+  padding-top: 4px;
+}
+
+.support-profile-card .learning-style-highlights {
+  gap: 8px;
+}
+
+.support-profile-card .learning-style-highlight {
+  padding: 9px 11px;
+}
+
+.support-profile-card .learning-style-summary,
+.support-profile-note,
+.focus-card p:last-child {
+  padding-right: 4px;
 }
 
 @media (max-width: 700px) {

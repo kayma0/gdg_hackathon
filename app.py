@@ -24,8 +24,17 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from google import genai
 from google.genai import types
-from pptx import Presentation
 from pydantic import BaseModel
+
+try:
+    from docx import Document
+except ImportError:
+    Document = None
+
+try:
+    from pptx import Presentation
+except ImportError:
+    Presentation = None
 
 
 # ---------------------------------------------------------
@@ -36,12 +45,16 @@ BASE_DIR = Path(__file__).resolve().parent
 
 load_dotenv(BASE_DIR / ".env")
 
-GEMINI_API_KEY = os.getenv(
-    "GEMINI_API_KEY",
-    "",
+GEMINI_API_KEY = (
+    os.getenv("GEMINI_API_KEY", "")
+    or os.getenv("GEMMA_API_KEY", "")
 ).strip()
 
 GEMINI_MODEL = "gemma-4-26b-a4b-it"
+
+GEMINI_SUPPORT_TIMEOUT_SECONDS = 8
+GEMINI_ROADMAP_TIMEOUT_SECONDS = 10
+GEMINI_CHAT_TIMEOUT_SECONDS = 20
 
 GEMINI_CLIENT = (
     genai.Client(api_key=GEMINI_API_KEY)
@@ -74,11 +87,84 @@ class LessonRequest(BaseModel):
     topics: list[str]
     objectives: list[str]
     estimated_minutes: int
+STUDY_LEVEL_LIBRARY: dict[str, dict[str, Any]] = {
+    "beginner": {
+        "label": "Beginner",
+        "summary": "Needs smaller steps, more examples and lower cognitive load.",
+        "pace_multiplier": 0.88,
+        "readiness_score": 0.35,
+    },
+    "intermediate": {
+        "label": "Intermediate",
+        "summary": "Can handle standard pacing with a balanced amount of support.",
+        "pace_multiplier": 1.0,
+        "readiness_score": 0.6,
+    },
+    "advanced": {
+        "label": "Advanced",
+        "summary": "Can move faster and handle a little more stretch in each session.",
+        "pace_multiplier": 1.08,
+        "readiness_score": 0.8,
+    },
+}
+
+STUDY_MOOD_LIBRARY: dict[str, dict[str, Any]] = {
+    "confident": {
+        "label": "Confident",
+        "summary": "The learner feels ready to move a bit quicker and handle more challenge.",
+        "pace_multiplier": 1.03,
+        "readiness_adjustment": 0.08,
+        "support_mode": "stretch",
+    },
+    "steady": {
+        "label": "Steady",
+        "summary": "The learner feels reasonably calm and can follow a balanced pace.",
+        "pace_multiplier": 1.0,
+        "readiness_adjustment": 0.0,
+        "support_mode": "balanced",
+    },
+    "unsure": {
+        "label": "Unsure",
+        "summary": "The learner wants clearer steps and more reassurance.",
+        "pace_multiplier": 0.93,
+        "readiness_adjustment": -0.07,
+        "support_mode": "gentle",
+    },
+    "anxious": {
+        "label": "Anxious",
+        "summary": "The learner needs calmer pacing, simpler steps and extra reassurance.",
+        "pace_multiplier": 0.86,
+        "readiness_adjustment": -0.14,
+        "support_mode": "high-support",
+    },
+}
 
 
 class GradeRequest(BaseModel):
     lesson: dict[str, Any]
     selected_answers: list[int]
+
+
+LEARNING_STYLE_LIBRARY: dict[str, dict[str, str]] = {
+    "quizzes": {
+        "label": "Quizzes",
+        "summary": "Finish each study block with short knowledge checks.",
+        "day_hint": "End with 3 quick questions to test recall.",
+        "objective": "Test yourself on {topic} with a short quiz.",
+    },
+    "flashcards": {
+        "label": "Flashcards",
+        "summary": "Convert key ideas into question-and-answer cards.",
+        "day_hint": "Make 3 flashcards for the biggest ideas.",
+        "objective": "Turn {topic} into flashcard prompts and answers.",
+    },
+    "notes": {
+        "label": "Notes",
+        "summary": "Use concise summaries, bullets and clean written recall.",
+        "day_hint": "Rewrite the topic as a 3-bullet summary.",
+        "objective": "Condense {topic} into a short set of notes.",
+    },
+}
 
 # ---------------------------------------------------------
 # Page routes
@@ -124,6 +210,8 @@ async def create_plan_page(
     start_date: str = Form(...),
     deadline: str = Form(...),
     study_minutes_per_day: int = Form(...),
+    learning_level: str = Form("intermediate"),
+    study_mood: str = Form("steady"),
     learning_styles: List[str] = Form(default_factory=list),
     uploaded_files: List[UploadFile] = File(
         default_factory=list
@@ -136,6 +224,8 @@ async def create_plan_page(
         study_minutes_per_day=(
             study_minutes_per_day
         ),
+        learning_level=learning_level,
+        study_mood=study_mood,
         learning_styles=learning_styles,
         uploaded_files=uploaded_files,
     )
@@ -172,6 +262,8 @@ async def generate_plan_api(
     start_date: str = Form(...),
     deadline: str = Form(...),
     study_minutes_per_day: int = Form(...),
+    learning_level: str = Form("intermediate"),
+    study_mood: str = Form("steady"),
     learning_styles: List[str] = Form(default_factory=list),
     uploaded_files: List[UploadFile] = File(
         default_factory=list
@@ -182,6 +274,8 @@ async def generate_plan_api(
         start_date=start_date,
         deadline=deadline,
         study_minutes_per_day=study_minutes_per_day,
+        learning_level=learning_level,
+        study_mood=study_mood,
         learning_styles=learning_styles,
         uploaded_files=uploaded_files,
     )
@@ -512,6 +606,264 @@ def safe_integer(
         return default
 
 
+def safe_float(
+    value: Any,
+    default: float,
+) -> float:
+    try:
+        return float(value)
+    except (
+        TypeError,
+        ValueError,
+    ):
+        return default
+
+
+def normalize_learning_level(
+    learning_level: str,
+) -> str:
+    value = str(learning_level).strip().lower()
+
+    if value in STUDY_LEVEL_LIBRARY:
+        return value
+
+    return "intermediate"
+
+
+def normalize_study_mood(
+    study_mood: str,
+) -> str:
+    value = str(study_mood).strip().lower()
+
+    if value in STUDY_MOOD_LIBRARY:
+        return value
+
+    return "steady"
+
+
+def build_heuristic_support_profile(
+    learning_level: str,
+    study_mood: str,
+    study_minutes_per_day: int,
+) -> dict[str, Any]:
+    level_key = normalize_learning_level(
+        learning_level
+    )
+    mood_key = normalize_study_mood(study_mood)
+
+    level_profile = STUDY_LEVEL_LIBRARY[level_key]
+    mood_profile = STUDY_MOOD_LIBRARY[mood_key]
+
+    pace_multiplier = round(
+        max(
+            0.75,
+            min(
+                level_profile["pace_multiplier"]
+                * mood_profile["pace_multiplier"],
+                1.2,
+            ),
+        ),
+        2,
+    )
+
+    weighted_minutes = max(
+        10,
+        min(
+            int(round(study_minutes_per_day * pace_multiplier)),
+            180,
+        ),
+    )
+
+    readiness_score = round(
+        max(
+            0.05,
+            min(
+                0.95,
+                level_profile["readiness_score"]
+                + mood_profile["readiness_adjustment"],
+            ),
+        ),
+        2,
+    )
+
+    if readiness_score < 0.4:
+        support_mode = "high-support"
+    elif readiness_score < 0.7:
+        support_mode = "balanced"
+    else:
+        support_mode = "stretch"
+
+    recommendations = [
+        "Use short study blocks with one clear goal.",
+        "Start each session with a quick example or recap.",
+        "End with a very small check-in so the learner gets an early win.",
+    ]
+
+    if support_mode == "high-support":
+        recommendations[0] = "Break the work into smaller, reassuring steps."
+        recommendations[1] = "Keep explanations simple and repeat the key idea once."
+
+    if support_mode == "stretch":
+        recommendations[2] = "Add one stretch question or bonus reflection at the end."
+
+    return {
+        "title": "Study readiness profile",
+        "level_key": level_key,
+        "level_label": level_profile["label"],
+        "level_summary": level_profile["summary"],
+        "mood_key": mood_key,
+        "mood_label": mood_profile["label"],
+        "mood_summary": mood_profile["summary"],
+        "readiness_score": readiness_score,
+        "pace_multiplier": pace_multiplier,
+        "weighted_minutes": weighted_minutes,
+        "support_mode": support_mode,
+        "summary": (
+            f"Self-report suggests a {level_profile['label'].lower()} learner who feels {mood_profile['label'].lower()}. "
+            f"Use a {support_mode.replace('-', ' ')} pace and aim for about {weighted_minutes} minutes per day."
+        ),
+        "recommendations": recommendations,
+        "main_model_guidance": (
+            f"Learner level: {level_profile['label']}. Mood: {mood_profile['label']}. "
+            f"Readiness score: {readiness_score}/1. Pace multiplier: {pace_multiplier}. "
+            f"Support mode: {support_mode}. Prefer lessons that match a {support_mode.replace('-', ' ')} pace."
+        ),
+    }
+
+
+async def build_support_profile(
+    prompt: str,
+    learning_level: str,
+    study_mood: str,
+    study_minutes_per_day: int,
+    learning_styles: List[str],
+    raw_text: str,
+    file_names: List[str],
+) -> dict[str, Any]:
+    heuristic_profile = build_heuristic_support_profile(
+        learning_level,
+        study_mood,
+        study_minutes_per_day,
+    )
+
+    if GEMINI_CLIENT is None:
+        return heuristic_profile
+
+    source_files = ", ".join(file_names) if file_names else "No filenames supplied"
+
+    user_prompt = f"""
+LEARNER REQUEST:
+{prompt.strip() or 'Help me build a realistic study roadmap.'}
+
+SELF-RATED LEVEL:
+{heuristic_profile['level_label']}
+
+SELF-RATED FEELING:
+{heuristic_profile['mood_label']}
+
+REQUESTED STUDY TIME PER DAY:
+{study_minutes_per_day} minutes
+
+SOURCE FILES:
+{source_files}
+
+LEARNING STYLES:
+{', '.join(learning_styles) if learning_styles else 'balanced mix'}
+
+COURSE MATERIAL PREVIEW:
+{raw_text[:3000]}
+
+Return valid JSON only with these keys:
+title, summary, level_label, mood_label, readiness_score, pace_multiplier, weighted_minutes, support_mode, recommendations, main_model_guidance
+"""
+
+    try:
+        response = await asyncio.wait_for(
+            asyncio.to_thread(
+                GEMINI_CLIENT.models.generate_content,
+                model=GEMINI_MODEL,
+                contents=user_prompt,
+                config=types.GenerateContentConfig(
+                    system_instruction=(
+                        "You are a study psychology assistant. "
+                        "Use the learner's self-rated level and feeling to estimate the support needed. "
+                        "Do not diagnose or mention mental health labels beyond the self-reported mood. "
+                        "Return valid JSON only."
+                    ),
+                    temperature=0.2,
+                ),
+            ),
+            timeout=GEMINI_SUPPORT_TIMEOUT_SECONDS,
+        )
+
+        parsed_profile = parse_support_profile_response(
+            raw_response=response.text or "",
+            fallback=heuristic_profile,
+        )
+
+        if parsed_profile is not None:
+            return parsed_profile
+
+    except asyncio.TimeoutError:
+        print(
+            f"Gemma support profile request timed out after {GEMINI_SUPPORT_TIMEOUT_SECONDS} seconds."
+        )
+
+    except Exception as exc:
+        print(f"Gemma support profile request failed: {exc!r}")
+
+    return heuristic_profile
+
+
+def parse_support_profile_response(
+    raw_response: str,
+    fallback: dict[str, Any],
+) -> dict[str, Any] | None:
+    cleaned = clean_json_response(raw_response)
+
+    try:
+        parsed = json.loads(cleaned)
+    except json.JSONDecodeError:
+        return None
+
+    if not isinstance(parsed, dict):
+        return None
+
+    recommendations = parsed.get("recommendations", [])
+    if not isinstance(recommendations, list):
+        recommendations = []
+
+    merged = dict(fallback)
+    merged.update(
+        {
+            "title": str(parsed.get("title", fallback["title"])),
+            "summary": str(parsed.get("summary", fallback["summary"])),
+            "level_label": str(parsed.get("level_label", fallback["level_label"])),
+            "mood_label": str(parsed.get("mood_label", fallback["mood_label"])),
+            "readiness_score": round(
+                max(0.05, min(0.95, safe_float(parsed.get("readiness_score"), fallback["readiness_score"]))),
+                2,
+            ),
+            "pace_multiplier": round(
+                max(0.75, min(1.2, safe_float(parsed.get("pace_multiplier"), fallback["pace_multiplier"]))),
+                2,
+            ),
+            "weighted_minutes": max(
+                10,
+                min(
+                    safe_integer(parsed.get("weighted_minutes"), fallback["weighted_minutes"]),
+                    180,
+                ),
+            ),
+            "support_mode": str(parsed.get("support_mode", fallback["support_mode"])),
+            "recommendations": [str(item) for item in recommendations if str(item).strip()] or fallback["recommendations"],
+            "main_model_guidance": str(parsed.get("main_model_guidance", fallback["main_model_guidance"])),
+        }
+    )
+
+    return merged
+
+
 # ---------------------------------------------------------
 # Main plan-building flow
 # ---------------------------------------------------------
@@ -521,6 +873,8 @@ async def build_plan_response(
     start_date: str,
     deadline: str,
     study_minutes_per_day: int,
+    learning_level: str,
+    study_mood: str,
     learning_styles: List[str],
     uploaded_files: List[UploadFile],
 ) -> dict[str, Any]:
@@ -600,22 +954,38 @@ async def build_plan_response(
             "Revision"
         )
 
+    support_profile = await build_support_profile(
+        prompt=prompt,
+        learning_level=learning_level,
+        study_mood=study_mood,
+        study_minutes_per_day=study_minutes_per_day,
+        learning_styles=selected_learning_styles,
+        raw_text=raw_text,
+        file_names=file_names,
+    )
+
+    weighted_study_minutes = support_profile.get(
+        "weighted_minutes",
+        study_minutes_per_day,
+    )
+
     plan = await build_plan_with_gemma(
         prompt=prompt,
         start_date=parsed_start,
         deadline=parsed_deadline,
-        study_minutes=(
-            study_minutes_per_day
-        ),
+        study_minutes=weighted_study_minutes,
         raw_text=raw_text,
         file_names=file_names,
         learning_styles=selected_learning_styles,
+        support_profile=support_profile,
     )
 
     plan = decorate_plan_with_learning_styles(
         plan=plan,
         learning_styles=selected_learning_styles,
     )
+
+    plan["support_profile"] = support_profile
 
     focus_topics = plan.get(
         "focus_topics",
@@ -649,6 +1019,7 @@ async def build_plan_with_gemma(
     raw_text: str,
     file_names: List[str],
     learning_styles: List[str],
+    support_profile: dict[str, Any],
 ) -> dict[str, Any]:
     placeholder_plan = generate_placeholder_plan(
         prompt=prompt,
@@ -661,9 +1032,6 @@ async def build_plan_with_gemma(
     )
 
     if GEMINI_CLIENT is None:
-        print(
-            "GEMINI_API_KEY is not configured. Using placeholder roadmap."
-        )
         return placeholder_plan
 
     calendar_dates = get_date_range(
@@ -679,13 +1047,22 @@ async def build_plan_with_gemma(
             start=1,
         )
     )
-    source_files = ", ".join(
-        file_names) if file_names else "No filenames supplied"
+    source_files = ", ".join(file_names) if file_names else "No filenames supplied"
+    support_profile_text = (
+        f"Level: {support_profile['level_label']}\n"
+        f"Mood: {support_profile['mood_label']}\n"
+        f"Readiness score: {support_profile['readiness_score']}\n"
+        f"Pace multiplier: {support_profile['pace_multiplier']}\n"
+        f"Weighted minutes: {support_profile['weighted_minutes']}\n"
+        f"Support mode: {support_profile['support_mode']}\n"
+        f"Recommendations: {', '.join(support_profile['recommendations'])}"
+    )
 
     system_instruction = (
         "You are ZEN, a supportive study companion. "
         "Create a realistic dated study roadmap and return valid JSON only. "
-        f"Adapt the plan to these learning styles: {', '.join(learning_styles) if learning_styles else 'balanced mix'}."
+        f"Adapt the plan to these learning styles: {', '.join(learning_styles) if learning_styles else 'balanced mix'}. "
+        "Use the learner support profile to tune pace, reassurance and challenge."
     )
     user_prompt = f"""
 LEARNER REQUEST:
@@ -699,6 +1076,9 @@ FINAL DEADLINE:
 
 STUDY TIME PER DAY:
 {study_minutes} minutes
+
+LEARNER SUPPORT PROFILE:
+{support_profile_text}
 
 SOURCE FILES:
 {source_files}
@@ -721,12 +1101,9 @@ COURSE MATERIAL:
                 config=types.GenerateContentConfig(
                     system_instruction=system_instruction,
                     temperature=0.2,
-                    thinking_config=types.ThinkingConfig(
-                        thinking_level="high"
-                    ),
                 ),
             ),
-            timeout=8,
+            timeout=GEMINI_ROADMAP_TIMEOUT_SECONDS,
         )
         parsed_plan = parse_plan_response(
             raw_response=response.text or "",
@@ -755,7 +1132,9 @@ COURSE MATERIAL:
             )
             return merged_plan
     except asyncio.TimeoutError:
-        print("Gemma roadmap request timed out after 8 seconds.")
+        print(
+            f"Gemma roadmap request timed out after {GEMINI_ROADMAP_TIMEOUT_SECONDS} seconds."
+        )
 
     except Exception as exc:
         print(f"Gemma roadmap request failed: {exc!r}")
@@ -782,6 +1161,30 @@ def clean_json_response(
     )
 
     return cleaned.strip()
+
+
+def clean_chat_response_text(
+    raw_response: str,
+) -> str:
+    cleaned_lines: list[str] = []
+
+    for raw_line in str(raw_response or "").splitlines():
+        line = raw_line.strip()
+
+        if not line:
+            cleaned_lines.append("")
+            continue
+
+        line = re.sub(r"^\s*[*•]\s+", "- ", line)
+        line = re.sub(r"[*_`]+", "", line)
+        line = re.sub(r"\s+", " ", line).strip()
+
+        cleaned_lines.append(line)
+
+    cleaned = "\n".join(cleaned_lines).strip()
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+
+    return cleaned
 
 
 def parse_plan_response(
@@ -1532,9 +1935,9 @@ async def build_chat_response(
 
         first_response = await asyncio.wait_for(
             asyncio.to_thread(chat.send_message, user_prompt),
-            timeout=8,
+            timeout=GEMINI_CHAT_TIMEOUT_SECONDS,
         )
-        first_reply = (first_response.text or "").strip()
+        first_reply = clean_chat_response_text(first_response.text or "")
 
         follow_up_reply = ""
         if follow_up:
@@ -1546,9 +1949,9 @@ async def build_chat_response(
 
             second_response = await asyncio.wait_for(
                 asyncio.to_thread(chat.send_message, follow_up_prompt),
-                timeout=8,
+                timeout=GEMINI_CHAT_TIMEOUT_SECONDS,
             )
-            follow_up_reply = (second_response.text or "").strip()
+            follow_up_reply = clean_chat_response_text(second_response.text or "")
 
         return {
             "first_reply": (
@@ -1559,14 +1962,24 @@ async def build_chat_response(
         }
 
     except asyncio.TimeoutError:
-        print("Gemma chat request timed out after 8 seconds.")
+        print(
+            f"Gemma chat request timed out after {GEMINI_CHAT_TIMEOUT_SECONDS} seconds."
+        )
         return {
-            "first_reply": "The chat service is taking longer than expected. Please try again in a moment.",
+            "first_reply": "ZEN is taking longer than expected right now. Please try again in a moment.",
             "follow_up_reply": "",
         }
 
     except Exception as exc:
-        print(f"Gemma chat request failed: {exc!r}")
+        exc_text = str(exc)
+
+        if "RESOURCE_EXHAUSTED" in exc_text or "Quota exceeded" in exc_text:
+            return {
+                "first_reply": "ZEN is a bit busy right now because the Gemini quota was reached. Please try again in a little while.",
+                "follow_up_reply": "",
+            }
+
+        print("Gemma chat request failed; using fallback reply.")
         return {
             "first_reply": "I’m having trouble reaching the study assistant right now. Please try again in a moment.",
             "follow_up_reply": "",
@@ -1709,9 +2122,6 @@ Rules:
                 system_instruction=system_instruction,
                 temperature=0.25,
                 response_mime_type="application/json",
-                thinking_config=types.ThinkingConfig(
-                    thinking_level="high"
-                ),
             ),
         )
 
