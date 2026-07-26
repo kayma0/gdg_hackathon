@@ -136,6 +136,33 @@
               </label>
             </div>
 
+            <div class="row-fields">
+              <label class="field">
+                <span>Current study level</span>
+
+                <select name="learning_level">
+                  <option value="beginner">Beginner</option>
+                  <option value="intermediate" selected>Intermediate</option>
+                  <option value="advanced">Advanced</option>
+                </select>
+              </label>
+
+              <label class="field">
+                <span>How are you feeling?</span>
+
+                <select name="study_mood">
+                  <option value="confident">Confident</option>
+                  <option value="steady" selected>Steady</option>
+                  <option value="unsure">Unsure</option>
+                  <option value="anxious">Anxious</option>
+                </select>
+              </label>
+            </div>
+
+            <p class="subtle-note support-form-note">
+              This helps ZEN keep the roadmap realistic without changing your material.
+            </p>
+
             <fieldset class="field learning-style-field">
               <span>Learning style</span>
 
@@ -144,14 +171,6 @@
               </p>
 
               <div class="style-options">
-                <label class="style-option">
-                  <input type="checkbox" name="learning_styles" value="visual" />
-                  <div class="style-chip">
-                    <strong>Visual</strong>
-                    <span>Diagrams, colour cues, mind maps</span>
-                  </div>
-                </label>
-
                 <label class="style-option">
                   <input type="checkbox" name="learning_styles" value="quizzes" />
                   <div class="style-chip">
@@ -165,14 +184,6 @@
                   <div class="style-chip">
                     <strong>Flashcards</strong>
                     <span>Quick question-and-answer cards</span>
-                  </div>
-                </label>
-
-                <label class="style-option">
-                  <input type="checkbox" name="learning_styles" value="audio" />
-                  <div class="style-chip">
-                    <strong>Audio</strong>
-                    <span>Read aloud and explain in your own words</span>
                   </div>
                 </label>
 

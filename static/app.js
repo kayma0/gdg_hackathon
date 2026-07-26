@@ -79,7 +79,6 @@ function hideTypingIndicator() {
 }
 
 async function sendMessage(message) {
-async function sendMessage(message) {
   const trimmedMessage = message.trim();
 
   if (!trimmedMessage || !chatMessages) return;
@@ -91,27 +90,6 @@ async function sendMessage(message) {
   scrollChatToBottom();
   showTypingIndicator();
 
-  try {
-    const response = await fetch("/api/chat", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        message: trimmedMessage,
-      }),
-    });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      throw new Error(data.detail || "ZEN could not reply.");
-    }
-
-    hideTypingIndicator();
-
-    chatMessages.appendChild(createAssistantMessage(data.reply));
-  } catch (error) {
   const formData = new FormData();
   formData.append("message", trimmedMessage);
 
@@ -133,16 +111,12 @@ async function sendMessage(message) {
     const payload = await response.json();
     const reply = payload.reply || "I’m here. Ask me about the material and I’ll explain it in a simple way.";
 
+    if (!response.ok) {
+      throw new Error(payload.detail || "ZEN could not reply.");
+    }
+
     hideTypingIndicator();
 
-    chatMessages.appendChild(
-      createAssistantMessage(
-        error.message || "ZEN could not complete that request.",
-      ),
-    );
-  }
-
-  scrollChatToBottom();
     chatMessages.appendChild(createAssistantMessage(reply));
     scrollChatToBottom();
   } catch (error) {

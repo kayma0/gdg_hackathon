@@ -226,11 +226,6 @@
             {% endfor %}
           </div>
         </section>
-          <p>
-            Each level is assigned to a real calendar date. Click a level to
-            generate its Gemma-powered lesson and quiz.
-          </p>
-        </div>
 
         <div class="roadmap-list">
           {% for day in plan.roadmap %}
@@ -288,6 +283,45 @@
           </button>
           {% endfor %}
         </div>
+              <h3>{{ plan.support_profile.title }}</h3>
+            </div>
+
+            <span class="learning-style-badge">
+              {{ plan.support_profile.level_label }} · {{ plan.support_profile.mood_label }}
+            </span>
+          </div>
+
+          <p class="learning-style-summary">
+            {{ plan.support_profile.summary }}
+          </p>
+
+          <div class="learning-style-highlights">
+            <article class="learning-style-highlight">
+              <strong>Adjusted pace</strong>
+              <span>
+                {{ plan.support_profile.weighted_minutes }} minutes per day, based on your self-rated level and mood.
+              </span>
+            </article>
+
+            <article class="learning-style-highlight">
+              <strong>Support mode</strong>
+              <span>
+                {{ plan.support_profile.support_mode | replace('-', ' ') }} coaching with a {{ plan.support_profile.pace_multiplier }}x pacing weight.
+              </span>
+            </article>
+
+            {% for recommendation in plan.support_profile.recommendations[:1] %}
+            <article class="learning-style-highlight">
+              <strong>Coach note</strong>
+              <span>{{ recommendation }}</span>
+            </article>
+            {% endfor %}
+          </div>
+
+          <p class="support-profile-note">
+            This is a self-reported study readiness signal, not a diagnosis.
+          </p>
+        </section>
 
         <section class="focus-card">
           <div class="focus-icon">◎</div>
