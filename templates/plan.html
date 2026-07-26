@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Study Sprint</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <main class="page-shell">
+      <section class="hero-card">
+        <div class="hero-copy">
+          <p class="eyebrow">Progress over perfection</p>
+          <h1>Your study sprint is ready.</h1>
+          <p class="hero-text">
+            You asked for a plan built around {{ study_minutes_per_day }} minutes per day and a deadline of {{ deadline }}.
+          </p>
+          <div class="hero-badges">
+            <span>Short sessions</span>
+            <span>Small wins first</span>
+            <span>Built for your materials</span>
+          </div>
+        </div>
+
+        <div class="wizard-card">
+          <div class="plan-card">
+            <div class="result-section">
+              <h2>{{ plan.summary }}</h2>
+              <p class="muted">Prompt: {{ plan.custom_prompt }}</p>
+              {% if file_names %}
+              <p class="muted">Files used: {{ file_names | join(', ') }}</p>
+              {% endif %}
+            </div>
+
+            <div class="result-section">
+              <h3>Study timeline</h3>
+              <div class="timeline">
+                {% for block in plan.study_blocks %}
+                <div class="timeline-item">
+                  <strong>{{ block.title }}</strong>
+                  <div>{{ block.focus }}</div>
+                  <div class="muted">{{ block.time }} • {{ block.goal }}</div>
+                </div>
+                {% endfor %}
+              </div>
+            </div>
+
+            <div class="result-section">
+              <h3>Minimum win for today</h3>
+              <p>{{ plan.minimum_win }}</p>
+            </div>
+
+            <div class="result-section">
+              <h3>Momentum note</h3>
+              <p>{{ plan.motivation_note }}</p>
+            </div>
+
+            <button id="start-study" type="button">Start study</button>
+
+            <div id="study-mode" class="study-section">
+              <div class="study-card">
+                <h3>{{ study_session.title }}</h3>
+                <p>{{ study_session.explanation }}</p>
+
+                <div class="result-section">
+                  <h4>Flashcards</h4>
+                  {% for card in study_session.flashcards %}
+                  <div class="timeline-item">
+                    <strong>Q:</strong> {{ card.question }}
+                    <div class="muted"><strong>A:</strong> {{ card.answer }}</div>
+                  </div>
+                  {% endfor %}
+                </div>
+
+                <div class="result-section">
+                  <h4>Mini quiz</h4>
+                  <p><strong>Q:</strong> {{ study_session.quiz.question }}</p>
+                  <p class="muted"><strong>A:</strong> {{ study_session.quiz.answer }}</p>
+                </div>
+
+                <div class="result-section">
+                  <h4>Open question</h4>
+                  <p>{{ study_session.open_question }}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>

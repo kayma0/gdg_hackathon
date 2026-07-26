@@ -138,3 +138,44 @@ The MVP is successful if:
 - Hour 3–5: wire upload form and backend endpoint
 - Hour 6–8: connect Gemma 4 and shape the output
 - Hour 9–10: polish UI and rehearse demo
+
+## Detailed implementation plan and current status
+
+A working MVP starter has now been created for this repository.
+
+### What has been implemented
+- a polished landing page with a short wizard-style form
+- an upload area for study materials
+- a prompt field, deadline field, and study-time input
+- a backend endpoint that accepts uploaded files and returns a study plan
+- support for PowerPoint files from the study_material folder, plus .txt and .docx uploads
+- a simple timeline-based plan view designed for demo use
+
+### Code structure
+- app.py: FastAPI backend, file parsing, and plan generation
+- templates/index.html: UI shell and form
+- static/styles.css: visual styling with the provided colour palette
+- static/app.js: form submission and result rendering
+
+### Demo flow
+1. Open the app in the browser.
+2. Upload one of the PowerPoint files from the study_material folder.
+3. Enter a deadline and study time.
+4. Press Generate plan.
+5. Review the short plan, timeline, minimum win, and motivation note.
+
+### Limitations and exceptions
+- Gemma 4 is not hardwired to a live endpoint yet. The app currently uses a deterministic plan generator that works well for the hackathon demo.
+- If you want true Gemma 4 responses later, we can swap in a real API call using a GEMMA_API_URL and API key.
+- PDF parsing is not included in this starter version; the current demo path is optimized for .pptx, .docx, and .txt.
+- This is a demo-focused MVP, not a production-grade study assistant.
+
+### How to run locally
+1. Install dependencies:
+   - pip install -r requirements.txt
+2. Start the app:
+   - uvicorn app:app --reload
+3. Open http://127.0.0.1:8000/
+
+### Verified status
+The app was tested locally with the real PowerPoint demo file from the study_material folder and returned a plan successfully.
