@@ -14,6 +14,7 @@ const lessonTitle = document.getElementById("lesson-title");
 const lessonLoading = document.getElementById("lesson-loading");
 const lessonContent = document.getElementById("lesson-content");
 const lessonError = document.getElementById("lesson-error");
+const materialContextInput = document.getElementById("chat-material-context");
 
 let attachedFiles = [];
 let activeLesson = null;
@@ -78,6 +79,7 @@ function hideTypingIndicator() {
 }
 
 async function sendMessage(message) {
+async function sendMessage(message) {
   const trimmedMessage = message.trim();
 
   if (!trimmedMessage || !chatMessages) return;
@@ -110,6 +112,27 @@ async function sendMessage(message) {
 
     chatMessages.appendChild(createAssistantMessage(data.reply));
   } catch (error) {
+  const formData = new FormData();
+  formData.append("message", trimmedMessage);
+
+  const materialContext = materialContextInput?.value || "";
+  if (materialContext) {
+    formData.append("context", materialContext);
+  }
+
+  attachedFiles.forEach((file) => {
+    formData.append("uploaded_files", file);
+  });
+
+  try {
+    const response = await fetch("/api/chat", {
+      method: "POST",
+      body: formData,
+    });
+
+    const payload = await response.json();
+    const reply = payload.reply || "I’m here. Ask me about the material and I’ll explain it in a simple way.";
+
     hideTypingIndicator();
 
     chatMessages.appendChild(
@@ -120,6 +143,17 @@ async function sendMessage(message) {
   }
 
   scrollChatToBottom();
+    chatMessages.appendChild(createAssistantMessage(reply));
+    scrollChatToBottom();
+  } catch (error) {
+    hideTypingIndicator();
+    chatMessages.appendChild(
+      createAssistantMessage(
+        "ZEN couldn’t reach the Gemini service right now. Please try again in a moment.",
+      ),
+    );
+    scrollChatToBottom();
+  }
 }
 
 function resizeTextarea() {

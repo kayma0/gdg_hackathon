@@ -149,6 +149,9 @@ async def create_plan_page(
             "file_names": plan_data[
                 "file_names"
             ],
+            "material_context": plan_data[
+                "material_context"
+            ],
             "learning_styles": plan_data[
                 "learning_styles"
             ],
@@ -196,30 +199,67 @@ async def generate_plan_api(
 async def chat_api(
     request: Request,
 ) -> JSONResponse:
-    try:
-        body = await request.json()
-    except Exception as exc:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                "The request must contain "
-                "valid JSON."
-            ),
-        ) from exc
+    content_type = request.headers.get(
+        "content-type",
+        "",
+    )
 
-    message = str(
-        body.get(
-            "message",
-            "",
-        )
-    ).strip()
+    message = ""
+    follow_up = ""
+    context = ""
+    uploaded_files: list[Any] = []
 
-    follow_up = str(
-        body.get(
-            "follow_up",
-            "",
+    if "multipart/form-data" in content_type:
+        form = await request.form()
+        message = str(
+            form.get("message", "")
+        ).strip()
+        follow_up = str(
+            form.get("follow_up", "")
+        ).strip()
+        context = str(
+            form.get("context", "")
+        ).strip()
+        uploaded_files = list(
+            form.getlist("uploaded_files")
         )
-    ).strip()
+    else:
+        try:
+            body = await request.json()
+        except Exception as exc:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "The request must contain "
+                    "valid JSON."
+                ),
+            ) from exc
+
+        message = str(
+            body.get(
+                "message",
+                "",
+            )
+        ).strip()
+
+        follow_up = str(
+            body.get(
+                "follow_up",
+                "",
+            )
+        ).strip()
+
+        context = str(
+            body.get(
+                "context",
+                "",
+            )
+        ).strip()
+
+        uploaded_files = body.get(
+            "uploaded_files",
+            [],
+        )
 
     if not message:
         raise HTTPException(
@@ -230,6 +270,8 @@ async def chat_api(
     chat_data = await build_chat_response(
         message=message,
         follow_up=follow_up,
+        context=context,
+        uploaded_files=uploaded_files,
     )
 
     return JSONResponse(
@@ -590,6 +632,7 @@ async def build_plan_response(
     return {
         "plan": plan,
         "file_names": file_names,
+        "material_context": raw_text,
         "learning_styles": selected_learning_styles,
     }
 
@@ -1408,91 +1451,124 @@ def decorate_plan_with_learning_styles(
 # Gemma chat
 # ---------------------------------------------------------
 
+async def build_chat_context(
+    context: str = "",
+    uploaded_files: list[Any] | None = None,
+) -> str:
+    material_chunks: list[str] = []
+
+    if context.strip():
+        material_chunks.append(
+            f"Additional context: {context.strip()}"
+        )
+
+    for uploaded_file in uploaded_files or []:
+        try:
+            if hasattr(uploaded_file, "filename"):
+                filename = str(
+                    getattr(uploaded_file, "filename", "") or ""
+                ).strip()
+                content = await extract_text_from_upload(uploaded_file)
+            else:
+                filename = str(
+                    uploaded_file.get("filename", "")
+                ).strip()
+                content = str(
+                    uploaded_file.get("content", "")
+                ).strip()
+        except Exception:
+            continue
+
+        if filename and content:
+            material_chunks.append(
+                f"File: {filename}\n{content[:12000]}"
+            )
+
+    return "\n\n".join(material_chunks)
+
+
 async def build_chat_response(
     message: str,
     follow_up: str = "",
+    context: str = "",
+    uploaded_files: list[Any] | None = None,
 ) -> dict[str, str]:
     if GEMINI_CLIENT is None:
         return {
             "first_reply": (
-                "The ZEN chat interface "
-                "is working, but the "
-                "Gemma API key is not "
-                "configured."
+                "The chat assistant is not available right now because the Gemini API key is missing. "
+                "Please ask again once the service is configured."
             ),
             "follow_up_reply": "",
         }
 
+    material_context = await build_chat_context(
+        context=context,
+        uploaded_files=uploaded_files,
+    )
+
     try:
+        system_instruction = (
+            "You are ZEN, a supportive and concise study companion. "
+            "Answer the learner's question using the supplied course material "
+            "when available. If the material is insufficient, say so briefly and "
+            "offer a helpful next step."
+        )
+
         chat = await asyncio.to_thread(
             GEMINI_CLIENT.chats.create,
             model=GEMINI_MODEL,
             config=types.GenerateContentConfig(
-                system_instruction=(
-                    "You are ZEN, a "
-                    "supportive and concise "
-                    "study companion. Help "
-                    "the learner understand "
-                    "concepts, stay focused "
-                    "and take the next small "
-                    "study action."
-                ),
+                system_instruction=system_instruction,
                 temperature=0.4,
-            )
+            ),
         )
+
+        user_prompt = message
+        if material_context:
+            user_prompt = (
+                f"{user_prompt}\n\nMaterial context:\n{material_context}"
+            )
 
         first_response = await asyncio.wait_for(
-            asyncio.to_thread(
-                chat.send_message,
-                message,
-            ),
+            asyncio.to_thread(chat.send_message, user_prompt),
             timeout=8,
         )
-
-        first_reply = (
-            first_response.text or ""
-        ).strip()
+        first_reply = (first_response.text or "").strip()
 
         follow_up_reply = ""
-
         if follow_up:
+            follow_up_prompt = follow_up
+            if material_context:
+                follow_up_prompt = (
+                    f"{follow_up_prompt}\n\nMaterial context:\n{material_context}"
+                )
+
             second_response = await asyncio.wait_for(
-                asyncio.to_thread(
-                    chat.send_message,
-                    follow_up,
-                ),
+                asyncio.to_thread(chat.send_message, follow_up_prompt),
                 timeout=8,
             )
-
-            follow_up_reply = (
-                second_response.text or ""
-            ).strip()
+            follow_up_reply = (second_response.text or "").strip()
 
         return {
             "first_reply": (
                 first_reply
-                or "I could not generate "
-                "a reply."
+                or "I could not generate a reply."
             ),
-            "follow_up_reply": (
-                follow_up_reply
-            ),
+            "follow_up_reply": follow_up_reply,
         }
 
     except asyncio.TimeoutError:
         print("Gemma chat request timed out after 8 seconds.")
+        return {
+            "first_reply": "The chat service is taking longer than expected. Please try again in a moment.",
+            "follow_up_reply": "",
+        }
 
     except Exception as exc:
-        print(
-            "Gemma chat request "
-            f"failed: {exc!r}"
-        )
-
+        print(f"Gemma chat request failed: {exc!r}")
         return {
-            "first_reply": (
-                "Sorry, ZEN could not "
-                "complete that chat request."
-            ),
+            "first_reply": "I’m having trouble reaching the study assistant right now. Please try again in a moment.",
             "follow_up_reply": "",
         }
 
