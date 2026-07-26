@@ -27,8 +27,14 @@ BASE_DIR = Path(__file__).resolve().parent
 
 load_dotenv(BASE_DIR / ".env")
 
+<<<<<<< Updated upstream
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
 GEMINI_MODEL = "gemma-4-26b-a4b-it"
+=======
+GEMMA_API_KEY = os.getenv("GEMMA_API_KEY", "").strip()
+GEMMA_MODEL = "gemma-4-26b-a4b-it"
+GEMMA_CLIENT = genai.Client() if GEMMA_API_KEY else None
+>>>>>>> Stashed changes
 
 GEMINI_CLIENT = (
     genai.Client(api_key=GEMINI_API_KEY)
@@ -262,7 +268,14 @@ async def build_plan_response(
             "Revision"
         )
 
+<<<<<<< Updated upstream
     plan = await build_plan_with_gemma(
+=======
+    # TEMPORARY:
+    # Replace this function call with the Gemma function later.
+    plan = generate_placeholder_plan()
+    plan=await build_plan_with_gemma(
+>>>>>>> Stashed changes
         prompt=prompt,
         deadline=deadline,
         study_minutes=study_minutes_per_day,
@@ -298,6 +311,7 @@ async def build_plan_with_gemma(
     study_minutes: int,
     raw_text: str,
     file_names: List[str],
+<<<<<<< Updated upstream
 ) -> dict[str, Any]:
     """
     Ask Gemma to generate the roadmap.
@@ -919,6 +933,15 @@ async def build_chat_response(
     try:
         chat = GEMINI_CLIENT.chats.create(
             model=GEMINI_MODEL,
+=======
+) -> dict:
+    if GEMMA_CLIENT is None:
+        return build_plan(prompt, deadline, study_minutes, raw_text, file_names)
+
+    try:
+        response=GEMMA_CLIENT.models.generate_content(
+            model=GEMMA_MODEL,
+>>>>>>> Stashed changes
             config=types.GenerateContentConfig(
                 system_instruction=(
                     "You are ZEN, a supportive and "
@@ -950,6 +973,7 @@ async def build_chat_response(
                 second_response.text or ""
             ).strip()
 
+<<<<<<< Updated upstream
         return {
             "first_reply": (
                 first_reply
@@ -973,6 +997,29 @@ async def build_chat_response(
             "follow_up_reply": "",
         }
 
+=======
+async def build_chat_response(message: str, follow_up: str="") -> dict:
+    if GEMMA_CLIENT is None:
+        return {
+            "first_reply": "GEMMA_API_KEY is not configured.",
+            "follow_up_reply": "",
+        }
+
+    try:
+        chat=GEMMA_CLIENT.chats.create(model=GEMMA_MODEL)
+        first_reply=chat.send_message(message).text or ""
+        follow_up_reply=chat.send_message(
+            follow_up).text if follow_up.strip() else ""
+        return {
+            "first_reply": first_reply,
+            "follow_up_reply": follow_up_reply or "",
+        }
+    except Exception:
+        return {
+            "first_reply": "Sorry, the Gemma chat request failed.",
+            "follow_up_reply": "",
+        }
+>>>>>>> Stashed changes
 
 # ---------------------------------------------------------
 # File extraction
