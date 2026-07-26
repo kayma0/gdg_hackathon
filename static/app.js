@@ -596,6 +596,14 @@ document.querySelectorAll(".quick-action").forEach((button) => {
   });
 });
 
+document.querySelectorAll(".demo-prompt-chip").forEach((button) => {
+  button.addEventListener("click", () => {
+    const demoPrompts = document.getElementById("demo-prompts");
+    if (demoPrompts) demoPrompts.hidden = true;
+    sendMessage(button.dataset.message || button.textContent.trim());
+  });
+});
+
 document.querySelectorAll(".level-button").forEach((button) => {
   button.addEventListener("click", () => {
     generateLesson(button);

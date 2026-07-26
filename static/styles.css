@@ -688,8 +688,46 @@ input[type="file"]::file-selector-button:hover {
 }
 
 /* ---------------------------------------------------------
-   Typing indicator
+   Demo prompt chips
 --------------------------------------------------------- */
+
+.demo-prompts {
+  padding: 12px 16px 4px;
+  border-top: 1px dashed var(--ink-light, #ccc);
+}
+
+.demo-prompts-label {
+  font-size: 0.78rem;
+  color: var(--ink-muted, #888);
+  margin-bottom: 8px;
+  font-style: italic;
+}
+
+.demo-prompts-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.demo-prompt-chip {
+  padding: 5px 11px;
+  border: 1.5px solid var(--ink-light, #bbb);
+  border-radius: 20px;
+  background: var(--paper-light);
+  color: var(--ink);
+  font-family: "Patrick Hand", cursive;
+  font-size: 0.88rem;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.demo-prompt-chip:hover {
+  background: var(--ink);
+  color: var(--paper-light);
+  border-color: var(--ink);
+}
+
+
 
 .typing-indicator {
   padding: 0 6px 12px;
