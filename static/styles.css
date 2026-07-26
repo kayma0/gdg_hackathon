@@ -1104,3 +1104,397 @@ input[type="file"]::file-selector-button:hover {
     display: none;
   }
 }
+
+/* ---------------------------------------------------------
+   Notebook date picker
+--------------------------------------------------------- */
+
+.calendar-row {
+  align-items: start;
+}
+
+.deadline-field {
+  min-width: 0;
+}
+
+.notebook-date-picker {
+  width: 100%;
+  min-width: 0;
+
+  display: grid;
+  grid-template-columns: 88px minmax(0, 1fr);
+  align-items: stretch;
+  gap: 14px;
+}
+
+.calendar-paper-icon {
+  position: relative;
+  min-height: 92px;
+  overflow: hidden;
+
+  display: flex;
+  flex-direction: column;
+
+  border: 1.5px solid var(--ink);
+  border-radius: 4px 11px 5px 9px;
+
+  color: var(--ink);
+  background: var(--paper-light);
+
+  box-shadow: 4px 4px 0 var(--paper-dark);
+  transform: rotate(-1deg);
+}
+
+.calendar-binding {
+  position: absolute;
+  z-index: 2;
+  top: -6px;
+  left: 0;
+  right: 0;
+
+  display: flex;
+  justify-content: space-around;
+
+  padding: 0 16px;
+}
+
+.calendar-binding span {
+  width: 7px;
+  height: 18px;
+
+  border: 1.5px solid var(--ink);
+  border-radius: 999px;
+
+  background: var(--paper-light);
+}
+
+.calendar-month {
+  padding: 12px 6px 6px;
+
+  color: var(--paper-light);
+  background: var(--ink);
+
+  font-family: "Patrick Hand", cursive;
+  font-size: 0.95rem;
+  letter-spacing: 0.08em;
+  text-align: center;
+}
+
+.calendar-day {
+  flex: 1;
+
+  display: grid;
+  place-items: center;
+
+  font-family: "Patrick Hand", cursive;
+  font-size: 2.25rem;
+  line-height: 1;
+}
+
+.date-input-area {
+  min-width: 0;
+
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 8px;
+}
+
+.date-input-area input[type="date"] {
+  width: 100%;
+  min-width: 0;
+  padding: 13px 14px;
+
+  border: 1.5px solid var(--line-dark);
+  border-radius: 3px 10px 4px 9px;
+
+  outline: none;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.72);
+
+  cursor: pointer;
+}
+
+.date-input-area input[type="date"]:focus {
+  border-color: var(--ink);
+  box-shadow: 3px 3px 0 var(--paper-dark);
+}
+
+.date-input-area input[type="date"] ::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: 0.72;
+  filter: grayscale(1);
+}
+
+.deadline-summary {
+  min-height: 1.3em;
+
+  color: var(--ink-soft);
+
+  font-family: "Patrick Hand", cursive;
+  font-size: 0.92rem;
+}
+
+.date-range-preview {
+  position: relative;
+
+  padding: 16px 18px 16px 28px;
+
+  border: 1.5px dashed var(--line-dark);
+  border-radius: 4px 13px 5px 11px;
+
+  background: rgba(255, 255, 255, 0.4);
+}
+
+.date-range-preview[hidden] {
+  display: none;
+}
+
+.date-range-line {
+  position: absolute;
+  top: 11px;
+  bottom: 11px;
+  left: 14px;
+
+  width: 2px;
+
+  background: var(--ink);
+  transform: rotate(1deg);
+}
+
+.date-range-line::before,
+.date-range-line::after {
+  content: "";
+
+  position: absolute;
+  left: 50%;
+
+  width: 8px;
+  height: 8px;
+
+  border: 1.5px solid var(--ink);
+  border-radius: 50%;
+
+  background: var(--paper-light);
+  transform: translateX(-50%);
+}
+
+.date-range-line::before {
+  top: 0;
+}
+
+.date-range-line::after {
+  bottom: 0;
+}
+
+.date-range-content {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 7px 12px;
+}
+
+.range-label {
+  width: 100%;
+
+  color: var(--ink-soft);
+
+  font-family: "Patrick Hand", cursive;
+  font-size: 0.95rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.date-range-content strong {
+  font-family: "Patrick Hand", cursive;
+  font-size: 1.18rem;
+  font-weight: 400;
+}
+
+.date-range-content span:last-child {
+  color: var(--ink-faint);
+  font-size: 0.75rem;
+}
+
+/* ---------------------------------------------------------
+   Roadmap date summary
+--------------------------------------------------------- */
+
+.roadmap-date-window {
+  margin-top: 18px;
+  padding: 14px;
+
+  display: flex;
+  align-items: center;
+  gap: 13px;
+
+  border: 1.5px solid var(--ink);
+  border-radius: 4px 14px 5px 12px;
+
+  background: var(--paper-light);
+}
+
+.mini-calendar-page {
+  width: 58px;
+  min-height: 66px;
+  overflow: hidden;
+
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 auto;
+
+  border: 1.5px solid var(--ink);
+  border-radius: 3px 9px 4px 8px;
+
+  background: var(--paper-light);
+  transform: rotate(-1deg);
+}
+
+.mini-calendar-month {
+  padding: 5px;
+
+  color: var(--paper-light);
+  background: var(--ink);
+
+  font-family: "Patrick Hand", cursive;
+  font-size: 0.8rem;
+  text-align: center;
+}
+
+.mini-calendar-number {
+  flex: 1;
+
+  display: grid;
+  place-items: center;
+
+  font-family: "Patrick Hand", cursive;
+  font-size: 1.65rem;
+  font-weight: 400;
+}
+
+.roadmap-date-copy {
+  min-width: 0;
+
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 7px;
+}
+
+.roadmap-date-copy > span:first-child {
+  width: 100%;
+
+  color: var(--ink-faint);
+
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.roadmap-date-copy strong {
+  font-family: "Patrick Hand", cursive;
+  font-size: 1rem;
+  font-weight: 400;
+}
+
+.date-arrow {
+  color: var(--ink-soft);
+}
+
+/* ---------------------------------------------------------
+   Dated roadmap items
+--------------------------------------------------------- */
+
+.roadmap-item {
+  position: relative;
+}
+
+.roadmap-date-marker {
+  width: 46px;
+  min-height: 54px;
+  overflow: hidden;
+
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 auto;
+
+  border: 1.5px solid var(--ink);
+  border-radius: 3px 9px 4px 8px;
+
+  background: var(--paper-light);
+}
+
+.roadmap-date-marker span {
+  padding: 3px;
+
+  color: var(--paper-light);
+  background: var(--ink);
+
+  font-family: "Patrick Hand", cursive;
+  font-size: 0.7rem;
+  text-align: center;
+}
+
+.roadmap-date-marker strong {
+  flex: 1;
+
+  display: grid;
+  place-items: center;
+
+  font-family: "Patrick Hand", cursive;
+  font-size: 1.35rem;
+  font-weight: 400;
+}
+
+.roadmap-item.current .roadmap-date-marker {
+  box-shadow: 3px 3px 0 var(--paper-dark);
+}
+
+.roadmap-full-date {
+  margin: -4px 0 9px;
+
+  color: var(--ink-faint);
+
+  font-family: "Patrick Hand", cursive;
+  font-size: 0.86rem;
+}
+
+.roadmap-status-mark {
+  margin-left: auto;
+
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+
+  width: 26px;
+  height: 26px;
+
+  color: var(--ink);
+
+  font-family: "Patrick Hand", cursive;
+  font-size: 1rem;
+}
+
+@media (max-width: 700px) {
+  .calendar-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 520px) {
+  .notebook-date-picker {
+    grid-template-columns: 72px minmax(0, 1fr);
+  }
+
+  .calendar-paper-icon {
+    min-height: 82px;
+  }
+
+  .calendar-day {
+    font-size: 1.85rem;
+  }
+
+  .roadmap-date-window {
+    align-items: flex-start;
+  }
+}

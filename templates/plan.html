@@ -3,11 +3,13 @@
 
 <head>
   <meta charset="UTF-8" />
+
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
   <title>ZEN Study Companion</title>
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
+
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Patrick+Hand&display=swap"
@@ -31,7 +33,10 @@
       <div class="topbar-actions">
         <div class="streak-pill">
           <span>🔥</span>
-          <strong>2 day streak</strong>
+
+          <strong>
+            {{ plan.streak }} day streak
+          </strong>
         </div>
 
         <button class="profile-button" type="button" aria-label="Profile">
@@ -41,7 +46,6 @@
     </header>
 
     <section class="workspace">
-      <!-- Chat column -->
       <section class="chat-panel">
         <div class="chat-header">
           <div>
@@ -66,15 +70,24 @@
 
               <div class="message-bubble">
                 <p>
-                  Your roadmap is ready. Today, we’ll begin with
-                  <strong>
-                    {{ plan.roadmap[0].title if plan.roadmap else "your first topic" }}
-                  </strong>.
+                  Your dated roadmap is ready.
                 </p>
 
+                {% if plan.roadmap %}
                 <p>
-                  Before we begin, how much time can you commit to this
-                  session?
+                  Today we’ll begin with
+                  <strong>
+                    {{ plan.roadmap[0].title }}
+                  </strong>
+                  on
+                  <strong>
+                    {{ plan.roadmap[0].display_date }}
+                  </strong>.
+                </p>
+                {% endif %}
+
+                <p>
+                  How much time can you commit to this session?
                 </p>
               </div>
 
@@ -134,7 +147,6 @@
         </p>
       </section>
 
-      <!-- Roadmap column -->
       <aside class="roadmap-panel">
         <div class="roadmap-header">
           <div>
@@ -145,6 +157,32 @@
           <span class="roadmap-count">
             {{ plan.total_days }} days
           </span>
+        </div>
+
+        <div class="roadmap-date-window">
+          <div class="mini-calendar-page">
+            <span class="mini-calendar-month">
+              {{ plan.start_month }}
+            </span>
+
+            <strong class="mini-calendar-number">
+              {{ plan.start_day_number }}
+            </strong>
+          </div>
+
+          <div class="roadmap-date-copy">
+            <span>Study window</span>
+
+            <strong>
+              {{ plan.start_display_date }}
+            </strong>
+
+            <span class="date-arrow">→</span>
+
+            <strong>
+              {{ plan.deadline_display_date }}
+            </strong>
+          </div>
         </div>
 
         <div class="progress-card">
@@ -158,38 +196,60 @@
           </div>
 
           <p>
-            Your roadmap adapts as you complete quizzes and reveal weaker
-            topics.
+            Each level is assigned to a real calendar date. ZEN can adapt
+            later sessions using your quiz results.
           </p>
         </div>
 
         <div class="roadmap-list">
           {% for day in plan.roadmap %}
-          <article
-            class="roadmap-item {% if day.status == 'available' %}current{% elif day.status == 'completed' %}completed{% else %}locked{% endif %}">
-            <div class="roadmap-marker">
-              {% if day.status == "completed" %}
-              ✓
-              {% elif day.status == "locked" %}
-              🔒
+          <article class="roadmap-item
+              {% if day.status == 'available' %}
+                current
+              {% elif day.status == 'completed' %}
+                completed
               {% else %}
-              {{ day.day }}
-              {% endif %}
+                locked
+              {% endif %}">
+            <div class="roadmap-date-marker">
+              <span>{{ day.month_short }}</span>
+              <strong>{{ day.day_number }}</strong>
             </div>
 
             <div class="roadmap-copy">
               <div class="roadmap-meta">
                 <span>Day {{ day.day }}</span>
-                <span>{{ day.estimated_minutes }} min</span>
+
+                <span>
+                  {{ day.weekday_short }}
+                </span>
+
+                <span>
+                  {{ day.estimated_minutes }} min
+                </span>
               </div>
 
               <h3>{{ day.title }}</h3>
+
+              <p class="roadmap-full-date">
+                {{ day.display_date }}
+              </p>
 
               <div class="topic-tags">
                 {% for topic in day.topics[:2] %}
                 <span>{{ topic }}</span>
                 {% endfor %}
               </div>
+            </div>
+
+            <div class="roadmap-status-mark" aria-label="{{ day.status }}">
+              {% if day.status == "completed" %}
+              ✓
+              {% elif day.status == "locked" %}
+              🔒
+              {% else %}
+              →
+              {% endif %}
             </div>
           </article>
           {% endfor %}
@@ -200,10 +260,12 @@
 
           <div>
             <p class="section-label">ZEN focus</p>
-            <h3>Build momentum first</h3>
+
+            <h3>Follow today’s page</h3>
+
             <p>
-              Complete one manageable session today. Your roadmap will adapt
-              from there.
+              Complete the session assigned to today. Future pages will adapt
+              as ZEN learns where you need more support.
             </p>
           </div>
         </section>

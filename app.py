@@ -4,13 +4,21 @@ import json
 import math
 import os
 import re
+from datetime import date, datetime, timedelta
 from io import BytesIO
 from pathlib import Path
 from typing import Any, List
 
 from docx import Document
 from dotenv import load_dotenv
-from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi import (
+    FastAPI,
+    File,
+    Form,
+    HTTPException,
+    Request,
+    UploadFile,
+)
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -27,25 +35,29 @@ BASE_DIR = Path(__file__).resolve().parent
 
 load_dotenv(BASE_DIR / ".env")
 
+GEMINI_API_KEY = os.getenv(
+    "GEMINI_API_KEY",
+    "",
+).strip()
 
-GEMMA_API_KEY = os.getenv("GEMMA_API_KEY", "").strip()
-GEMMA_MODEL = "gemma-4-26b-a4b-it"
-GEMMA_CLIENT = genai.Client() if GEMMA_API_KEY else None
+GEMINI_MODEL = "gemma-4-26b-a4b-it"
 
-GEMMA_CLIENT = (
-    genai.Client(api_key=GEMMA_API_KEY)
-    if GEMMA_API_KEY
+GEMINI_CLIENT = (
+    genai.Client(api_key=GEMINI_API_KEY)
+    if GEMINI_API_KEY
     else None
 )
 
 app = FastAPI(
     title="ZEN Study Companion",
-    version="0.1.0",
+    version="0.2.0",
 )
 
 app.mount(
     "/static",
-    StaticFiles(directory=BASE_DIR / "static"),
+    StaticFiles(
+        directory=BASE_DIR / "static"
+    ),
     name="static",
 )
 
@@ -58,8 +70,13 @@ templates = Jinja2Templates(
 # Page routes
 # ---------------------------------------------------------
 
-@app.get("/", response_class=HTMLResponse)
-async def index(request: Request) -> HTMLResponse:
+@app.get(
+    "/",
+    response_class=HTMLResponse,
+)
+async def index(
+    request: Request,
+) -> HTMLResponse:
     return templates.TemplateResponse(
         request,
         "index.html",
@@ -69,32 +86,27 @@ async def index(request: Request) -> HTMLResponse:
     )
 
 
-@app.get("/chat", response_class=HTMLResponse)
-async def chat_page(request: Request) -> HTMLResponse:
-    return templates.TemplateResponse(
-        request,
-        "chat.html",
-        {
-            "request": request,
-        },
-    )
-
-
-@app.get("/health")
+@app.get(
+    "/health",
+)
 async def health() -> dict[str, str]:
     return {
         "status": "ok",
         "application": "ZEN",
         "gemma_configured": str(
-            GEMMA_CLIENT is not None
+            GEMINI_CLIENT is not None
         ).lower(),
     }
 
 
-@app.post("/plan", response_class=HTMLResponse)
+@app.post(
+    "/plan",
+    response_class=HTMLResponse,
+)
 async def create_plan_page(
     request: Request,
     prompt: str = Form(...),
+    start_date: str = Form(...),
     deadline: str = Form(...),
     study_minutes_per_day: int = Form(...),
     uploaded_files: List[UploadFile] = File(
@@ -103,8 +115,11 @@ async def create_plan_page(
 ) -> HTMLResponse:
     plan_data = await build_plan_response(
         prompt=prompt,
+        start_date=start_date,
         deadline=deadline,
-        study_minutes_per_day=study_minutes_per_day,
+        study_minutes_per_day=(
+            study_minutes_per_day
+        ),
         uploaded_files=uploaded_files,
     )
 
@@ -114,21 +129,24 @@ async def create_plan_page(
         {
             "request": request,
             "plan": plan_data["plan"],
-            "study_session": plan_data[
-                "study_session"
+            "file_names": plan_data[
+                "file_names"
             ],
-            "file_names": plan_data["file_names"],
             "study_minutes_per_day": (
                 study_minutes_per_day
             ),
+            "start_date": start_date,
             "deadline": deadline,
         },
     )
 
 
-@app.post("/api/plan")
+@app.post(
+    "/api/plan",
+)
 async def generate_plan_api(
     prompt: str = Form(...),
+    start_date: str = Form(...),
     deadline: str = Form(...),
     study_minutes_per_day: int = Form(...),
     uploaded_files: List[UploadFile] = File(
@@ -137,8 +155,11 @@ async def generate_plan_api(
 ) -> JSONResponse:
     plan_data = await build_plan_response(
         prompt=prompt,
+        start_date=start_date,
         deadline=deadline,
-        study_minutes_per_day=study_minutes_per_day,
+        study_minutes_per_day=(
+            study_minutes_per_day
+        ),
         uploaded_files=uploaded_files,
     )
 
@@ -149,33 +170,35 @@ async def generate_plan_api(
 # Chat API
 # ---------------------------------------------------------
 
-@app.post("/api/chat")
+@app.post(
+    "/api/chat",
+)
 async def chat_api(
     request: Request,
 ) -> JSONResponse:
-    """
-    Receives JSON from the chat UI:
-
-    {
-        "message": "Explain memory management",
-        "follow_up": ""
-    }
-    """
-
     try:
         body = await request.json()
     except Exception as exc:
         raise HTTPException(
             status_code=400,
-            detail="The request must contain valid JSON.",
+            detail=(
+                "The request must contain "
+                "valid JSON."
+            ),
         ) from exc
 
     message = str(
-        body.get("message", "")
+        body.get(
+            "message",
+            "",
+        )
     ).strip()
 
     follow_up = str(
-        body.get("follow_up", "")
+        body.get(
+            "follow_up",
+            "",
+        )
     ).strip()
 
     if not message:
@@ -191,7 +214,9 @@ async def chat_api(
 
     return JSONResponse(
         {
-            "reply": chat_data["first_reply"],
+            "reply": chat_data[
+                "first_reply"
+            ],
             "follow_up_reply": chat_data[
                 "follow_up_reply"
             ],
@@ -200,15 +225,128 @@ async def chat_api(
 
 
 # ---------------------------------------------------------
+# Date helpers
+# ---------------------------------------------------------
+
+def parse_iso_date(
+    value: str,
+    field_name: str,
+) -> date:
+    try:
+        return datetime.strptime(
+            value,
+            "%Y-%m-%d",
+        ).date()
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"{field_name} must use "
+                "the YYYY-MM-DD format."
+            ),
+        ) from exc
+
+
+def validate_date_range(
+    start_date: str,
+    deadline: str,
+) -> tuple[date, date]:
+    parsed_start = parse_iso_date(
+        start_date,
+        "Start date",
+    )
+
+    parsed_deadline = parse_iso_date(
+        deadline,
+        "Deadline",
+    )
+
+    if parsed_deadline < parsed_start:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "The deadline cannot be "
+                "before the start date."
+            ),
+        )
+
+    return (
+        parsed_start,
+        parsed_deadline,
+    )
+
+
+def get_date_range(
+    start: date,
+    end: date,
+) -> list[date]:
+    number_of_days = (
+        end - start
+    ).days + 1
+
+    return [
+        start + timedelta(days=index)
+        for index in range(
+            number_of_days
+        )
+    ]
+
+
+def format_display_date(
+    study_date: date,
+) -> str:
+    return study_date.strftime(
+        "%a, %d %B %Y"
+    )
+
+
+def format_short_display_date(
+    study_date: date,
+) -> str:
+    return study_date.strftime(
+        "%d %b %Y"
+    )
+
+
+def safe_integer(
+    value: Any,
+    default: int,
+) -> int:
+    try:
+        return int(value)
+    except (
+        TypeError,
+        ValueError,
+    ):
+        return default
+
+
+# ---------------------------------------------------------
 # Main plan-building flow
 # ---------------------------------------------------------
 
 async def build_plan_response(
     prompt: str,
+    start_date: str,
     deadline: str,
     study_minutes_per_day: int,
     uploaded_files: List[UploadFile],
 ) -> dict[str, Any]:
+    parsed_start, parsed_deadline = (
+        validate_date_range(
+            start_date,
+            deadline,
+        )
+    )
+
+    study_minutes_per_day = max(
+        10,
+        min(
+            study_minutes_per_day,
+            180,
+        ),
+    )
+
     file_names: list[str] = []
     extracted_sections: list[str] = []
 
@@ -228,7 +366,8 @@ async def build_plan_response(
             )
 
             extracted_sections.append(
-                f"FILE: {uploaded_file.filename}\n"
+                f"FILE: "
+                f"{uploaded_file.filename}\n"
                 f"{extracted_text}"
             )
 
@@ -236,10 +375,10 @@ async def build_plan_response(
         extracted_sections
     )
 
-    # When the user uploads nothing, use files from
-    # the study_material directory.
     if not raw_text.strip():
-        raw_text = load_demo_text_from_folder()
+        raw_text = (
+            load_demo_text_from_folder()
+        )
 
         material_directory = (
             BASE_DIR / "study_material"
@@ -249,12 +388,13 @@ async def build_plan_response(
             file_names = [
                 path.name
                 for path in sorted(
-                    material_directory.glob("*")
+                    material_directory.glob(
+                        "*"
+                    )
                 )
                 if path.is_file()
             ]
 
-    # Final fallback so that the UI can still be tested.
     if not raw_text.strip():
         raw_text = (
             "Introduction\n"
@@ -266,26 +406,17 @@ async def build_plan_response(
 
     plan = await build_plan_with_gemma(
         prompt=prompt,
-        deadline=deadline,
-        study_minutes=study_minutes_per_day,
+        start_date=parsed_start,
+        deadline=parsed_deadline,
+        study_minutes=(
+            study_minutes_per_day
+        ),
         raw_text=raw_text,
         file_names=file_names,
     )
 
-    focus_topics = plan.get(
-        "focus_topics",
-        ["Core concepts"],
-    )
-
-    study_session = (
-        build_placeholder_study_session(
-            focus_topics
-        )
-    )
-
     return {
         "plan": plan,
-        "study_session": study_session,
         "file_names": file_names,
     }
 
@@ -296,115 +427,856 @@ async def build_plan_response(
 
 async def build_plan_with_gemma(
     prompt: str,
-    deadline: str,
+    start_date: date,
+    deadline: date,
     study_minutes: int,
     raw_text: str,
     file_names: List[str],
-) -> dict:
-    if GEMMA_CLIENT is None:
+) -> dict[str, Any]:
+    if GEMINI_CLIENT is None:
+        print(
+            "GEMINI_API_KEY is not "
+            "configured. Using placeholder "
+            "roadmap."
+        )
+
         return generate_placeholder_plan(
             prompt=prompt,
+            start_date=start_date,
             deadline=deadline,
-            study_minutes_per_day=study_minutes,
+            study_minutes_per_day=(
+                study_minutes
+            ),
             raw_text=raw_text,
             file_names=file_names,
         )
 
-    try:
-        response = GEMMA_CLIENT.models.generate_content(
-            model=GEMMA_MODEL,
-            config=types.GenerateContentConfig(
-                thinking_config=types.ThinkingConfig(
-                    thinking_level="high"
-                ),
-                system_instruction=(
-                    "You are ZEN, a supportive and "
-                    "concise study companion. Help "
-                    "the learner understand concepts, "
-                    "stay focused and take the next "
-                    "small study action."
-                ),
-            ),
-            contents=(
-                "Create a short study plan from the following input.\n"
-                f"Prompt: {prompt.strip() or 'Keep it small and realistic.'}\n"
-                f"Deadline: {deadline}\n"
-                f"Study time per day: {study_minutes} minutes\n"
-                f"Source files: {', '.join(file_names) if file_names else 'none'}\n"
-                f"Source text:\n{raw_text[:12000]}"
-            ),
+    calendar_dates = get_date_range(
+        start_date,
+        deadline,
+    )
+
+    total_days = len(
+        calendar_dates
+    )
+
+    date_list = "\n".join(
+        (
+            f"- Day {index}: "
+            f"{study_date.isoformat()} "
+            f"({study_date.strftime('%A')})"
         )
-        plan = parse_plan_response(response.text or "", study_minutes)
-        if plan is not None:
-            return plan
-    except Exception:
-        pass
+        for index, study_date in enumerate(
+            calendar_dates,
+            start=1,
+        )
+    )
+
+    system_instruction = """
+You are ZEN, an adaptive study companion.
+
+Analyse the supplied school material and generate a realistic,
+date-based study roadmap.
+
+You must decide:
+
+- the major topics
+- prerequisite order
+- how topics should be divided across the available dates
+- each date's learning objectives
+- concise lesson content
+- exactly three quiz questions for every date
+
+The dates supplied by the application are mandatory.
+
+Return valid JSON only.
+Do not return markdown.
+Do not include text outside the JSON object.
+"""
+
+    source_files = (
+        ", ".join(file_names)
+        if file_names
+        else "No filenames supplied"
+    )
+
+    user_prompt = f"""
+LEARNER REQUEST:
+{prompt.strip() or "Help me make steady progress."}
+
+ROADMAP START DATE:
+{start_date.isoformat()}
+
+FINAL DEADLINE:
+{deadline.isoformat()}
+
+TOTAL AVAILABLE CALENDAR DAYS:
+{total_days}
+
+STUDY TIME PER DAY:
+{study_minutes} minutes
+
+SOURCE FILES:
+{source_files}
+
+MANDATORY ROADMAP DATES:
+{date_list}
+
+COURSE MATERIAL:
+--- START MATERIAL ---
+{raw_text[:12000]}
+--- END MATERIAL ---
+
+Create exactly one roadmap entry for every mandatory date.
+
+Do not:
+- omit any date
+- add extra dates
+- change the supplied date order
+- create dates after the deadline
+- combine two dates into one entry
+
+If there is too much material for the available dates:
+- prioritise prerequisites
+- prioritise important course concepts
+- use concise lessons
+- identify what the learner should revisit later
+
+If there are more dates than major topics:
+- use extra dates for review
+- use extra dates for practice
+- use extra dates for weak-topic recovery
+- use the final date for preparation and consolidation
+
+Return JSON using this structure:
+
+{{
+  "course_title": "string",
+  "course_summary": "string",
+  "learner_goal": "string",
+  "start_date": "{start_date.isoformat()}",
+  "deadline": "{deadline.isoformat()}",
+  "minutes_per_day": {study_minutes},
+  "total_days": {total_days},
+  "midpoint_day": {max(1, math.ceil(total_days / 2))},
+  "current_day": 1,
+  "streak": 0,
+  "completed_days": [],
+  "weak_topics": [],
+  "focus_topics": [
+    "string"
+  ],
+  "roadmap": [
+    {{
+      "day": 1,
+      "study_date": "{start_date.isoformat()}",
+      "title": "string",
+      "status": "available",
+      "estimated_minutes": {study_minutes},
+      "topics": [
+        "string"
+      ],
+      "objectives": [
+        "string"
+      ],
+      "lesson": {{
+        "introduction": "string",
+        "explanation": "string",
+        "example": "string",
+        "recap": [
+          "string"
+        ]
+      }},
+      "quiz": [
+        {{
+          "id": "day-1-q-1",
+          "topic": "string",
+          "question": "string",
+          "options": [
+            "string",
+            "string",
+            "string",
+            "string"
+          ],
+          "correct_answer": 0,
+          "explanation": "string"
+        }}
+      ]
+    }}
+  ]
+}}
+
+Rules:
+
+1. Return exactly {total_days} roadmap entries.
+2. Use the mandatory dates exactly as supplied.
+3. Create exactly three quiz questions per date.
+4. Every quiz question must have four options.
+5. correct_answer must be an integer from 0 to 3.
+6. Only Day 1 should have status "available".
+7. All later days should have status "locked".
+8. Base educational content on the supplied material.
+"""
+
+    try:
+        response = (
+            GEMINI_CLIENT.models.generate_content(
+                model=GEMINI_MODEL,
+                contents=user_prompt,
+                config=types.GenerateContentConfig(
+                    system_instruction=(
+                        system_instruction
+                    ),
+                    temperature=0.2,
+                    thinking_config=(
+                        types.ThinkingConfig(
+                            thinking_level="high"
+                        )
+                    ),
+                ),
+            )
+        )
+
+        parsed_plan = parse_plan_response(
+            raw_response=(
+                response.text or ""
+            ),
+            study_minutes=study_minutes,
+            prompt=prompt,
+            start_date=start_date,
+            deadline=deadline,
+        )
+
+        if parsed_plan is not None:
+            return parsed_plan
+
+        print(
+            "Gemma returned invalid "
+            "roadmap JSON. Using "
+            "placeholder roadmap."
+        )
+
+    except Exception as exc:
+        print(
+            "Gemma roadmap request "
+            f"failed: {exc}"
+        )
 
     return generate_placeholder_plan(
         prompt=prompt,
+        start_date=start_date,
         deadline=deadline,
-        study_minutes_per_day=study_minutes,
+        study_minutes_per_day=(
+            study_minutes
+        ),
         raw_text=raw_text,
         file_names=file_names,
     )
 
 
-def parse_plan_response(raw_response: str, study_minutes: int) -> dict | None:
+def clean_json_response(
+    raw_response: str,
+) -> str:
     cleaned = raw_response.strip()
 
-    if cleaned.startswith("```"):
-        cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned)
-        cleaned = re.sub(r"\s*```$", "", cleaned)
+    cleaned = re.sub(
+        r"^```(?:json)?\s*",
+        "",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+
+    cleaned = re.sub(
+        r"\s*```$",
+        "",
+        cleaned,
+    )
+
+    return cleaned.strip()
+
+
+def parse_plan_response(
+    raw_response: str,
+    study_minutes: int,
+    prompt: str,
+    start_date: date,
+    deadline: date,
+) -> dict[str, Any] | None:
+    cleaned = clean_json_response(
+        raw_response
+    )
 
     try:
-        parsed = json.loads(cleaned)
-    except json.JSONDecodeError:
+        parsed = json.loads(
+            cleaned
+        )
+    except json.JSONDecodeError as exc:
+        print(
+            "Could not parse Gemma "
+            f"JSON: {exc}"
+        )
+
+        print(
+            "Gemma response preview: "
+            f"{raw_response[:500]}"
+        )
+
         return None
 
-    focus_topics = parsed.get("focus_topics")
-    study_blocks = parsed.get("study_blocks")
-
-    if not isinstance(focus_topics, list) or not isinstance(study_blocks, list):
+    if not isinstance(
+        parsed,
+        dict,
+    ):
         return None
 
-    if not all(isinstance(topic, str) for topic in focus_topics):
+    generated_roadmap = parsed.get(
+        "roadmap"
+    )
+
+    if not isinstance(
+        generated_roadmap,
+        list,
+    ):
         return None
 
-    if not all(isinstance(block, dict) for block in study_blocks):
-        return None
+    calendar_dates = get_date_range(
+        start_date,
+        deadline,
+    )
+
+    valid_days: list[
+        dict[str, Any]
+    ] = []
+
+    for index, expected_date in enumerate(
+        calendar_dates,
+        start=1,
+    ):
+        if (
+            index - 1 <
+            len(generated_roadmap)
+            and isinstance(
+                generated_roadmap[
+                    index - 1
+                ],
+                dict,
+            )
+        ):
+            day = generated_roadmap[
+                index - 1
+            ]
+        else:
+            day = {}
+
+        topics = day.get(
+            "topics",
+            [],
+        )
+
+        objectives = day.get(
+            "objectives",
+            [],
+        )
+
+        quiz = day.get(
+            "quiz",
+            [],
+        )
+
+        lesson = day.get(
+            "lesson",
+            {},
+        )
+
+        if not isinstance(
+            topics,
+            list,
+        ):
+            topics = []
+
+        if not isinstance(
+            objectives,
+            list,
+        ):
+            objectives = []
+
+        if not isinstance(
+            quiz,
+            list,
+        ):
+            quiz = []
+
+        if not isinstance(
+            lesson,
+            dict,
+        ):
+            lesson = {}
+
+        clean_topics = [
+            str(topic)
+            for topic in topics
+            if str(topic).strip()
+        ]
+
+        if not clean_topics:
+            clean_topics = [
+                "Core concepts"
+            ]
+
+        clean_objectives = [
+            str(objective)
+            for objective in objectives
+            if str(objective).strip()
+        ]
+
+        if not clean_objectives:
+            clean_objectives = [
+                (
+                    "Understand the key "
+                    "ideas assigned to "
+                    "this date."
+                ),
+                (
+                    "Complete a short "
+                    "knowledge check."
+                ),
+            ]
+
+        valid_questions: list[
+            dict[str, Any]
+        ] = []
+
+        for question_index, question in enumerate(
+            quiz[:3],
+            start=1,
+        ):
+            if not isinstance(
+                question,
+                dict,
+            ):
+                continue
+
+            options = question.get(
+                "options",
+                [],
+            )
+
+            if not isinstance(
+                options,
+                list,
+            ):
+                options = []
+
+            clean_options = [
+                str(option)
+                for option in options[:4]
+            ]
+
+            while len(
+                clean_options
+            ) < 4:
+                clean_options.append(
+                    (
+                        "Option "
+                        f"{len(clean_options) + 1}"
+                    )
+                )
+
+            correct_answer = safe_integer(
+                question.get(
+                    "correct_answer",
+                    0,
+                ),
+                0,
+            )
+
+            correct_answer = max(
+                0,
+                min(
+                    correct_answer,
+                    3,
+                ),
+            )
+
+            valid_questions.append(
+                {
+                    "id": str(
+                        question.get(
+                            "id",
+                            (
+                                f"day-{index}-"
+                                f"q-{question_index}"
+                            ),
+                        )
+                    ),
+                    "topic": str(
+                        question.get(
+                            "topic",
+                            clean_topics[0],
+                        )
+                    ),
+                    "question": str(
+                        question.get(
+                            "question",
+                            (
+                                "Which statement "
+                                "best matches "
+                                "today's topic?"
+                            ),
+                        )
+                    ),
+                    "options": clean_options,
+                    "correct_answer": (
+                        correct_answer
+                    ),
+                    "explanation": str(
+                        question.get(
+                            "explanation",
+                            "",
+                        )
+                    ),
+                }
+            )
+
+        while len(
+            valid_questions
+        ) < 3:
+            question_number = (
+                len(valid_questions) + 1
+            )
+
+            valid_questions.append(
+                {
+                    "id": (
+                        f"day-{index}-"
+                        f"q-{question_number}"
+                    ),
+                    "topic": (
+                        clean_topics[0]
+                    ),
+                    "question": (
+                        "Which statement "
+                        "best matches "
+                        "today's topic?"
+                    ),
+                    "options": [
+                        "The central idea",
+                        "An unrelated detail",
+                        "A filename",
+                        "A deadline",
+                    ],
+                    "correct_answer": 0,
+                    "explanation": (
+                        "The first option "
+                        "describes the "
+                        "central idea."
+                    ),
+                }
+            )
+
+        recap = lesson.get(
+            "recap",
+            [],
+        )
+
+        if not isinstance(
+            recap,
+            list,
+        ):
+            recap = []
+
+        estimated_minutes = safe_integer(
+            day.get(
+                "estimated_minutes",
+                study_minutes,
+            ),
+            study_minutes,
+        )
+
+        estimated_minutes = max(
+            10,
+            min(
+                estimated_minutes,
+                180,
+            ),
+        )
+
+        valid_days.append(
+            {
+                "day": index,
+                "study_date": (
+                    expected_date.isoformat()
+                ),
+                "display_date": (
+                    format_display_date(
+                        expected_date
+                    )
+                ),
+                "weekday_short": (
+                    expected_date.strftime(
+                        "%a"
+                    )
+                ),
+                "month_short": (
+                    expected_date.strftime(
+                        "%b"
+                    ).upper()
+                ),
+                "day_number": (
+                    expected_date.strftime(
+                        "%d"
+                    )
+                ),
+                "title": str(
+                    day.get(
+                        "title",
+                        (
+                            f"Study Day "
+                            f"{index}"
+                        ),
+                    )
+                ),
+                "status": (
+                    "available"
+                    if index == 1
+                    else "locked"
+                ),
+                "estimated_minutes": (
+                    estimated_minutes
+                ),
+                "topics": clean_topics,
+                "objectives": (
+                    clean_objectives
+                ),
+                "lesson": {
+                    "introduction": str(
+                        lesson.get(
+                            "introduction",
+                            (
+                                "Today's "
+                                "learning session"
+                            ),
+                        )
+                    ),
+                    "explanation": str(
+                        lesson.get(
+                            "explanation",
+                            (
+                                "Review the "
+                                "assigned topics "
+                                "and explain them "
+                                "in your own words."
+                            ),
+                        )
+                    ),
+                    "example": str(
+                        lesson.get(
+                            "example",
+                            (
+                                "Find an example "
+                                "inside your "
+                                "uploaded material."
+                            ),
+                        )
+                    ),
+                    "recap": [
+                        str(item)
+                        for item in recap
+                    ],
+                },
+                "quiz": valid_questions,
+            }
+        )
+
+    focus_topics = parsed.get(
+        "focus_topics",
+        [],
+    )
+
+    if not isinstance(
+        focus_topics,
+        list,
+    ):
+        focus_topics = []
+
+    if not focus_topics:
+        for roadmap_day in valid_days:
+            focus_topics.extend(
+                roadmap_day["topics"]
+            )
+
+    focus_topics = list(
+        dict.fromkeys(
+            str(topic)
+            for topic in focus_topics
+            if str(topic).strip()
+        )
+    )[:8]
+
+    if not focus_topics:
+        focus_topics = [
+            "Core concepts"
+        ]
+
+    total_days = len(
+        valid_days
+    )
 
     return {
-        "summary": parsed.get("summary") if isinstance(parsed.get("summary"), str) else "Your study plan is ready.",
-        "focus_topics": focus_topics[:4],
-        "study_blocks": study_blocks[:4],
-        "minimum_win": parsed.get("minimum_win") if isinstance(parsed.get("minimum_win"), str) else "Spend 10 minutes reviewing the main topic.",
-        "motivation_note": parsed.get("motivation_note") if isinstance(parsed.get("motivation_note"), str) else "Start small and keep moving.",
-        "custom_prompt": parsed.get("custom_prompt") if isinstance(parsed.get("custom_prompt"), str) else "Keep it small and realistic.",
-        "daily_time": parsed.get("daily_time") if isinstance(parsed.get("daily_time"), str) else f"{study_minutes} minutes per day",
+        "course_title": str(
+            parsed.get(
+                "course_title",
+                "ZEN Study Roadmap",
+            )
+        ),
+        "course_summary": str(
+            parsed.get(
+                "course_summary",
+                "Your dated roadmap is ready.",
+            )
+        ),
+        "learner_goal": str(
+            parsed.get(
+                "learner_goal",
+                (
+                    prompt.strip()
+                    or "Make steady progress."
+                ),
+            )
+        ),
+        "start_date": (
+            start_date.isoformat()
+        ),
+        "deadline": (
+            deadline.isoformat()
+        ),
+        "start_display_date": (
+            format_short_display_date(
+                start_date
+            )
+        ),
+        "deadline_display_date": (
+            format_short_display_date(
+                deadline
+            )
+        ),
+        "start_month": (
+            start_date.strftime(
+                "%b"
+            ).upper()
+        ),
+        "start_day_number": (
+            start_date.strftime(
+                "%d"
+            )
+        ),
+        "minutes_per_day": (
+            study_minutes
+        ),
+        "total_days": total_days,
+        "midpoint_day": max(
+            1,
+            math.ceil(
+                total_days / 2
+            ),
+        ),
+        "current_day": 1,
+        "streak": 0,
+        "completed_days": [],
+        "weak_topics": [],
+        "focus_topics": focus_topics,
+        "roadmap": valid_days,
     }
 
 
-async def build_chat_response(message: str, follow_up: str = "") -> dict:
-    if GEMMA_CLIENT is None:
+# ---------------------------------------------------------
+# Gemma chat
+# ---------------------------------------------------------
+
+async def build_chat_response(
+    message: str,
+    follow_up: str = "",
+) -> dict[str, str]:
+    if GEMINI_CLIENT is None:
         return {
-            "first_reply": "GEMINI_API_KEY is not configured.",
+            "first_reply": (
+                "The ZEN chat interface "
+                "is working, but the "
+                "Gemma API key is not "
+                "configured."
+            ),
             "follow_up_reply": "",
         }
 
     try:
-        chat = GEMMA_CLIENT.chats.create(model=GEMMA_MODEL)
-        first_reply = chat.send_message(message).text or ""
-        follow_up_reply = chat.send_message(follow_up).text if follow_up.strip() else ""
+        chat = (
+            GEMINI_CLIENT.chats.create(
+                model=GEMINI_MODEL,
+                config=(
+                    types.GenerateContentConfig(
+                        system_instruction=(
+                            "You are ZEN, a "
+                            "supportive and concise "
+                            "study companion. Help "
+                            "the learner understand "
+                            "concepts, stay focused "
+                            "and take the next small "
+                            "study action."
+                        ),
+                        temperature=0.4,
+                    )
+                ),
+            )
+        )
+
+        first_response = (
+            chat.send_message(
+                message
+            )
+        )
+
+        first_reply = (
+            first_response.text or ""
+        ).strip()
+
+        follow_up_reply = ""
+
+        if follow_up:
+            second_response = (
+                chat.send_message(
+                    follow_up
+                )
+            )
+
+            follow_up_reply = (
+                second_response.text or ""
+            ).strip()
 
         return {
-            "first_reply": first_reply,
-            "follow_up_reply": follow_up_reply or "",
+            "first_reply": (
+                first_reply
+                or "I could not generate "
+                "a reply."
+            ),
+            "follow_up_reply": (
+                follow_up_reply
+            ),
         }
-    except Exception:
+
+    except Exception as exc:
+        print(
+            "Gemma chat request "
+            f"failed: {exc}"
+        )
+
         return {
-            "first_reply": "Sorry, the Gemma chat request failed.",
+            "first_reply": (
+                "Sorry, ZEN could not "
+                "complete that chat request."
+            ),
             "follow_up_reply": "",
         }
+
 
 # ---------------------------------------------------------
 # File extraction
@@ -436,7 +1308,8 @@ async def extract_text_from_upload(
 
             return "\n".join(
                 paragraph.text.strip()
-                for paragraph in document.paragraphs
+                for paragraph
+                in document.paragraphs
                 if paragraph.text.strip()
             )
 
@@ -450,8 +1323,9 @@ async def extract_text_from_upload(
         raise HTTPException(
             status_code=400,
             detail=(
-                f"Could not read "
-                f"{uploaded_file.filename}: {exc}"
+                "Could not read "
+                f"{uploaded_file.filename}: "
+                f"{exc}"
             ),
         ) from exc
 
@@ -487,26 +1361,32 @@ def extract_text_from_pptx(
         if slide_parts:
             text_parts.append(
                 f"SLIDE {slide_number}\n"
-                + "\n".join(slide_parts)
+                + "\n".join(
+                    slide_parts
+                )
             )
 
-    return "\n\n".join(text_parts)
+    return "\n\n".join(
+        text_parts
+    )
 
 
 def load_demo_text_from_folder() -> str:
-    material_dir = (
+    material_directory = (
         BASE_DIR / "study_material"
     )
 
-    if not material_dir.exists():
+    if not material_directory.exists():
         return ""
 
     collected: list[str] = []
 
     for file_path in sorted(
-        material_dir.glob("*")
+        material_directory.glob("*")
     ):
-        suffix = file_path.suffix.lower()
+        suffix = (
+            file_path.suffix.lower()
+        )
 
         try:
             if suffix == ".pptx":
@@ -514,8 +1394,10 @@ def load_demo_text_from_folder() -> str:
                     str(file_path)
                 )
 
-                text = extract_text_from_pptx(
-                    presentation
+                text = (
+                    extract_text_from_pptx(
+                        presentation
+                    )
                 )
 
             elif suffix == ".docx":
@@ -541,89 +1423,143 @@ def load_demo_text_from_folder() -> str:
 
             if text.strip():
                 collected.append(
-                    f"FILE: {file_path.name}\n"
+                    f"FILE: "
+                    f"{file_path.name}\n"
                     f"{text}"
                 )
 
         except Exception as exc:
             print(
-                f"Could not read "
+                "Could not read "
                 f"{file_path.name}: {exc}"
             )
 
-    return "\n\n".join(collected)
+    return "\n\n".join(
+        collected
+    )
 
 
 # ---------------------------------------------------------
-# Placeholder roadmap
+# Placeholder dated roadmap
 # ---------------------------------------------------------
 
 def generate_placeholder_plan(
     prompt: str,
-    deadline: str,
+    start_date: date,
+    deadline: date,
     study_minutes_per_day: int,
     raw_text: str,
     file_names: list[str],
 ) -> dict[str, Any]:
-    """
-    Used only when Gemma is unavailable or its response
-    cannot be parsed.
-    """
-
     topics = extract_placeholder_topics(
         raw_text
     )
 
     study_minutes = max(
         10,
-        min(study_minutes_per_day, 180),
+        min(
+            study_minutes_per_day,
+            180,
+        ),
     )
 
-    total_days = determine_placeholder_days(
-        deadline
+    calendar_dates = get_date_range(
+        start_date,
+        deadline,
     )
 
-    roadmap: list[dict[str, Any]] = []
+    roadmap: list[
+        dict[str, Any]
+    ] = []
 
-    for day_number in range(
-        1,
-        total_days + 1,
+    for index, study_date in enumerate(
+        calendar_dates,
+        start=1,
     ):
         topic = topics[
-            (day_number - 1) % len(topics)
+            (index - 1) % len(topics)
         ]
 
         next_topic = topics[
-            day_number % len(topics)
+            index % len(topics)
         ]
+
+        is_final_day = (
+            index == len(
+                calendar_dates
+            )
+        )
+
+        if is_final_day:
+            title = (
+                "Final review and "
+                "course consolidation"
+            )
+
+            day_topics = [
+                topic,
+                "Final review",
+            ]
+        else:
+            title = (
+                f"Understanding {topic}"
+                if index > 1
+                else (
+                    "Getting started "
+                    f"with {topic}"
+                )
+            )
+
+            day_topics = [
+                topic,
+                next_topic,
+            ]
 
         roadmap.append(
             {
-                "day": day_number,
-                "title": build_day_title(
-                    day_number,
-                    topic,
+                "day": index,
+                "study_date": (
+                    study_date.isoformat()
                 ),
+                "display_date": (
+                    format_display_date(
+                        study_date
+                    )
+                ),
+                "weekday_short": (
+                    study_date.strftime(
+                        "%a"
+                    )
+                ),
+                "month_short": (
+                    study_date.strftime(
+                        "%b"
+                    ).upper()
+                ),
+                "day_number": (
+                    study_date.strftime(
+                        "%d"
+                    )
+                ),
+                "title": title,
                 "status": (
                     "available"
-                    if day_number == 1
+                    if index == 1
                     else "locked"
                 ),
                 "estimated_minutes": (
                     study_minutes
                 ),
-                "topics": [
-                    topic,
-                    next_topic,
-                ],
+                "topics": day_topics,
                 "objectives": [
                     (
                         "Understand the main "
                         f"ideas behind {topic}."
                     ),
                     (
-                        f"Connect {topic} to an "
-                        "example from the material."
+                        f"Connect {topic} to "
+                        "an example from the "
+                        "material."
                     ),
                     (
                         "Complete a short "
@@ -632,220 +1568,210 @@ def generate_placeholder_plan(
                 ],
                 "lesson": {
                     "introduction": (
-                        f"Introduction to {topic}"
+                        f"Introduction to "
+                        f"{topic}"
                     ),
                     "explanation": (
                         "Review the key ideas "
-                        f"connected to {topic} and "
-                        "explain them in your own "
-                        "words."
+                        f"connected to {topic} "
+                        "and explain them in "
+                        "your own words."
                     ),
                     "example": (
-                        f"Find one example of {topic} "
-                        "inside your uploaded material."
+                        "Find one example of "
+                        f"{topic} inside your "
+                        "uploaded material."
                     ),
                     "recap": [
                         (
-                            "State the main meaning "
-                            f"of {topic}."
+                            "State the main "
+                            f"meaning of {topic}."
                         ),
                         (
                             f"Explain how {topic} "
-                            f"connects to {next_topic}."
+                            f"connects to "
+                            f"{next_topic}."
                         ),
                         (
-                            "Write down one question "
-                            "you still have."
+                            "Write down one "
+                            "question you still "
+                            "have."
                         ),
                     ],
                 },
-                "quiz": [
-                    {
-                        "id": (
-                            f"day-{day_number}-q-1"
-                        ),
-                        "topic": topic,
-                        "question": (
-                            "What is the main idea "
-                            f"behind {topic}?"
-                        ),
-                        "options": [
-                            "The central definition",
-                            "An unrelated detail",
-                            "A file name",
-                            "A study deadline",
-                        ],
-                        "correct_answer": 0,
-                        "explanation": (
-                            "The first option "
-                            "describes the core concept."
-                        ),
-                    },
-                    {
-                        "id": (
-                            f"day-{day_number}-q-2"
-                        ),
-                        "topic": topic,
-                        "question": (
-                            "What is a useful way "
-                            f"to review {topic}?"
-                        ),
-                        "options": [
-                            (
-                                "Explain it using "
-                                "your own words"
-                            ),
-                            "Ignore all examples",
-                            (
-                                "Skip the topic "
-                                "completely"
-                            ),
-                            "Only read the title",
-                        ],
-                        "correct_answer": 0,
-                        "explanation": (
-                            "Explaining a topic in "
-                            "your own words helps "
-                            "reveal gaps."
-                        ),
-                    },
-                    {
-                        "id": (
-                            f"day-{day_number}-q-3"
-                        ),
-                        "topic": next_topic,
-                        "question": (
-                            f"Why should {next_topic} "
-                            "be connected to earlier "
-                            "topics?"
-                        ),
-                        "options": [
-                            (
-                                "It helps build a "
-                                "logical understanding"
-                            ),
-                            (
-                                "It makes the deadline "
-                                "longer"
-                            ),
-                            (
-                                "It removes the "
-                                "course files"
-                            ),
-                            (
-                                "It changes the "
-                                "file format"
-                            ),
-                        ],
-                        "correct_answer": 0,
-                        "explanation": (
-                            "Connections between "
-                            "topics support deeper "
-                            "understanding."
-                        ),
-                    },
-                ],
+                "quiz": (
+                    create_placeholder_quiz(
+                        day_number=index,
+                        topic=topic,
+                        next_topic=next_topic,
+                    )
+                ),
             }
         )
 
     source_label = (
-        ", ".join(file_names[:2])
+        ", ".join(
+            file_names[:2]
+        )
         if file_names
         else "your provided material"
     )
 
-    course_title = (
-        topics[0].title()
-        if topics
-        else "Study Course"
+    total_days = len(
+        calendar_dates
     )
-
-    summary = (
-        f"ZEN created a {total_days}-day "
-        f"study roadmap using {source_label}."
-    )
-
-    study_blocks = [
-        {
-            "title": (
-                f"Day {day['day']}: "
-                f"{day['title']}"
-            ),
-            "focus": ", ".join(
-                day["topics"]
-            ),
-            "time": (
-                f"{day['estimated_minutes']} "
-                "minutes"
-            ),
-            "goal": day["objectives"][0],
-        }
-        for day in roadmap
-    ]
 
     return {
-        "course_title": course_title,
-        "course_summary": summary,
+        "course_title": (
+            topics[0].title()
+            if topics
+            else "Study Course"
+        ),
+        "course_summary": (
+            f"ZEN created a "
+            f"{total_days}-day dated "
+            f"roadmap using "
+            f"{source_label}."
+        ),
         "learner_goal": (
             prompt.strip()
             or "Make steady study progress."
         ),
-        "deadline": (
-            deadline.strip()
-            or "No deadline provided"
+        "start_date": (
+            start_date.isoformat()
         ),
-        "minutes_per_day": study_minutes,
+        "deadline": (
+            deadline.isoformat()
+        ),
+        "start_display_date": (
+            format_short_display_date(
+                start_date
+            )
+        ),
+        "deadline_display_date": (
+            format_short_display_date(
+                deadline
+            )
+        ),
+        "start_month": (
+            start_date.strftime(
+                "%b"
+            ).upper()
+        ),
+        "start_day_number": (
+            start_date.strftime(
+                "%d"
+            )
+        ),
+        "minutes_per_day": (
+            study_minutes
+        ),
         "total_days": total_days,
         "midpoint_day": max(
             1,
-            math.ceil(total_days / 2),
+            math.ceil(
+                total_days / 2
+            ),
         ),
         "current_day": 1,
         "streak": 0,
         "completed_days": [],
         "weak_topics": [],
-        "focus_topics": topics[:6],
+        "focus_topics": (
+            topics[:8]
+        ),
         "roadmap": roadmap,
-        "summary": summary,
-        "custom_prompt": (
-            prompt.strip()
-            or "Keep the plan realistic."
-        ),
-        "study_blocks": study_blocks,
-        "minimum_win": (
-            "Spend 10 minutes reviewing "
-            f"{topics[0]} and write three "
-            "key ideas."
-        ),
-        "motivation_note": (
-            "Start with one manageable session. "
-            "Progress matters more than perfection."
-        ),
-        "daily_time": (
-            f"{study_minutes} minutes per day"
-        ),
     }
 
 
-def determine_placeholder_days(
-    deadline: str,
-) -> int:
-    match = re.search(
-        r"\d+",
-        deadline or "",
-    )
-
-    if not match:
-        return 4
-
-    requested_days = int(
-        match.group()
-    )
-
-    return max(
-        2,
-        min(requested_days, 10),
-    )
+def create_placeholder_quiz(
+    day_number: int,
+    topic: str,
+    next_topic: str,
+) -> list[dict[str, Any]]:
+    return [
+        {
+            "id": (
+                f"day-{day_number}-q-1"
+            ),
+            "topic": topic,
+            "question": (
+                "What is the main idea "
+                f"behind {topic}?"
+            ),
+            "options": [
+                "The central definition",
+                "An unrelated detail",
+                "A filename",
+                "A study deadline",
+            ],
+            "correct_answer": 0,
+            "explanation": (
+                "The first option "
+                "describes the core "
+                "concept."
+            ),
+        },
+        {
+            "id": (
+                f"day-{day_number}-q-2"
+            ),
+            "topic": topic,
+            "question": (
+                "What is a useful way "
+                f"to review {topic}?"
+            ),
+            "options": [
+                (
+                    "Explain it using "
+                    "your own words"
+                ),
+                "Ignore all examples",
+                "Skip the topic",
+                "Only read the title",
+            ],
+            "correct_answer": 0,
+            "explanation": (
+                "Explaining a topic in "
+                "your own words reveals "
+                "gaps in understanding."
+            ),
+        },
+        {
+            "id": (
+                f"day-{day_number}-q-3"
+            ),
+            "topic": next_topic,
+            "question": (
+                f"Why should {next_topic} "
+                "connect to earlier topics?"
+            ),
+            "options": [
+                (
+                    "It builds logical "
+                    "understanding"
+                ),
+                (
+                    "It makes the "
+                    "deadline longer"
+                ),
+                (
+                    "It removes the "
+                    "course files"
+                ),
+                (
+                    "It changes the "
+                    "file format"
+                ),
+            ],
+            "correct_answer": 0,
+            "explanation": (
+                "Connections between "
+                "topics support deeper "
+                "understanding."
+            ),
+        },
+    ]
 
 
 def extract_placeholder_topics(
@@ -883,7 +1809,9 @@ def extract_placeholder_topics(
         ):
             continue
 
-        cleaned_lines.append(cleaned)
+        cleaned_lines.append(
+            cleaned
+        )
 
     topics: list[str] = []
     seen: set[str] = set()
@@ -894,13 +1822,20 @@ def extract_placeholder_topics(
         if lowered in seen:
             continue
 
-        if len(line.split()) > 9:
+        if len(
+            line.split()
+        ) > 9:
             continue
 
-        seen.add(lowered)
-        topics.append(line)
+        seen.add(
+            lowered
+        )
 
-        if len(topics) >= 6:
+        topics.append(
+            line
+        )
+
+        if len(topics) >= 8:
             break
 
     if not topics:
@@ -912,82 +1847,3 @@ def extract_placeholder_topics(
         ]
 
     return topics
-
-
-def build_day_title(
-    day_number: int,
-    topic: str,
-) -> str:
-    if day_number == 1:
-        return (
-            f"Getting started with {topic}"
-        )
-
-    return f"Understanding {topic}"
-
-
-# ---------------------------------------------------------
-# Placeholder study session
-# ---------------------------------------------------------
-
-def build_placeholder_study_session(
-    topics: list[str],
-) -> dict[str, Any]:
-    first_topic = (
-        topics[0]
-        if topics
-        else "the first topic"
-    )
-
-    second_topic = (
-        topics[1]
-        if len(topics) > 1
-        else first_topic
-    )
-
-    return {
-        "title": (
-            f"Mini study session: {first_topic}"
-        ),
-        "explanation": (
-            "Begin by identifying the main idea "
-            f"behind {first_topic}. Then connect it "
-            "to one example from your material."
-        ),
-        "flashcards": [
-            {
-                "question": (
-                    "What is the main idea behind "
-                    f"{first_topic}?"
-                ),
-                "answer": (
-                    "Describe the concept briefly "
-                    "in your own words."
-                ),
-            },
-            {
-                "question": (
-                    f"How does {second_topic} "
-                    "connect to the course?"
-                ),
-                "answer": (
-                    "Connect it to a definition, "
-                    "example or process."
-                ),
-            },
-        ],
-        "quiz": {
-            "question": (
-                "What should you review first "
-                f"about {first_topic}?"
-            ),
-            "answer": (
-                "Start with its main definition "
-                "and one clear example."
-            ),
-        },
-        "open_question": (
-            f"Explain {first_topic} as though "
-            "you were teaching it to a friend."
-        ),
-    }

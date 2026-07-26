@@ -3,11 +3,13 @@
 
 <head>
   <meta charset="UTF-8" />
+
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
   <title>ZEN Study Companion</title>
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
+
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Patrick+Hand&display=swap"
@@ -66,8 +68,8 @@
                 </p>
 
                 <p>
-                  Tell me your deadline and how much time you can study each
-                  day.
+                  Choose your final study date and tell me how much time you
+                  can study each day.
                 </p>
               </div>
             </div>
@@ -77,8 +79,8 @@
             <label class="field">
               <span>Prompt</span>
 
-              <textarea name="prompt" rows="4">
-Help me make steady progress with limited time. Make the plan realistic, short, and motivating.</textarea>
+              <textarea name="prompt" rows="4"
+                required>Help me make steady progress with limited time. Make the plan realistic, short, and motivating.</textarea>
             </label>
 
             <label class="field">
@@ -91,11 +93,36 @@ Help me make steady progress with limited time. Make the plan realistic, short, 
               </small>
             </label>
 
-            <div class="row-fields">
-              <label class="field">
-                <span>Deadline</span>
+            <div class="row-fields calendar-row">
+              <label class="field deadline-field">
+                <span>Study deadline</span>
 
-                <input type="text" name="deadline" placeholder="e.g. 3 days from now" required />
+                <div class="notebook-date-picker">
+                  <div class="calendar-paper-icon" aria-hidden="true">
+                    <div class="calendar-binding">
+                      <span></span>
+                      <span></span>
+                    </div>
+
+                    <div class="calendar-month" id="calendar-month">
+                      DATE
+                    </div>
+
+                    <div class="calendar-day" id="calendar-day">
+                      —
+                    </div>
+                  </div>
+
+                  <div class="date-input-area">
+                    <input type="date" id="deadline" name="deadline" required />
+
+                    <small class="subtle-note deadline-summary" id="deadline-summary">
+                      Choose the final day of your study roadmap.
+                    </small>
+                  </div>
+                </div>
+
+                <input type="hidden" id="start-date" name="start_date" />
               </label>
 
               <label class="field">
@@ -109,14 +136,182 @@ Help me make steady progress with limited time. Make the plan realistic, short, 
               </label>
             </div>
 
+            <div class="date-range-preview" id="date-range-preview" hidden>
+              <div class="date-range-line"></div>
+
+              <div class="date-range-content">
+                <span class="range-label">Your study window</span>
+
+                <strong id="range-dates"></strong>
+
+                <span id="range-duration"></span>
+              </div>
+            </div>
+
             <button class="submit-button" type="submit">
-              Create my study roadmap
+              Create my dated study roadmap
             </button>
           </form>
         </div>
       </section>
     </section>
   </main>
+
+  <script>
+    const deadlineInput =
+      document.getElementById("deadline");
+
+    const startDateInput =
+      document.getElementById("start-date");
+
+    const calendarMonth =
+      document.getElementById("calendar-month");
+
+    const calendarDay =
+      document.getElementById("calendar-day");
+
+    const deadlineSummary =
+      document.getElementById("deadline-summary");
+
+    const dateRangePreview =
+      document.getElementById("date-range-preview");
+
+    const rangeDates =
+      document.getElementById("range-dates");
+
+    const rangeDuration =
+      document.getElementById("range-duration");
+
+    function toLocalDateString(date) {
+      const year = date.getFullYear();
+
+      const month = String(
+        date.getMonth() + 1
+      ).padStart(2, "0");
+
+      const day = String(
+        date.getDate()
+      ).padStart(2, "0");
+
+      return `${year}-${month}-${day}`;
+    }
+
+    function parseLocalDate(value) {
+      const [year, month, day] = value
+        .split("-")
+        .map(Number);
+
+      return new Date(
+        year,
+        month - 1,
+        day
+      );
+    }
+
+    function countStudyDays(
+      startDate,
+      endDate
+    ) {
+      const millisecondsPerDay =
+        1000 * 60 * 60 * 24;
+
+      return (
+        Math.round(
+          (
+            endDate.getTime() -
+            startDate.getTime()
+          ) / millisecondsPerDay
+        ) + 1
+      );
+    }
+
+    function formatShortDate(date) {
+      return date.toLocaleDateString(
+        "en-GB",
+        {
+          day: "numeric",
+          month: "short",
+          year: "numeric",
+        }
+      );
+    }
+
+    function updateDeadlineDisplay() {
+      if (!deadlineInput.value) {
+        calendarMonth.textContent = "DATE";
+        calendarDay.textContent = "—";
+
+        deadlineSummary.textContent =
+          "Choose the final day of your study roadmap.";
+
+        dateRangePreview.hidden = true;
+        return;
+      }
+
+      const selectedDate = parseLocalDate(
+        deadlineInput.value
+      );
+
+      const today = parseLocalDate(
+        startDateInput.value
+      );
+
+      const totalDays = countStudyDays(
+        today,
+        selectedDate
+      );
+
+      calendarMonth.textContent =
+        selectedDate
+          .toLocaleDateString(
+            "en-GB",
+            {
+              month: "short",
+            }
+          )
+          .toUpperCase();
+
+      calendarDay.textContent =
+        selectedDate.getDate();
+
+      const formattedDeadline =
+        selectedDate.toLocaleDateString(
+          "en-GB",
+          {
+            weekday: "long",
+            day: "numeric",
+            month: "long",
+            year: "numeric",
+          }
+        );
+
+      deadlineSummary.textContent =
+        `Final session: ${formattedDeadline}`;
+
+      rangeDates.textContent =
+        `${formatShortDate(today)} → ` +
+        `${formatShortDate(selectedDate)}`;
+
+      rangeDuration.textContent =
+        `${totalDays} calendar day` +
+        `${totalDays === 1 ? "" : "s"} available`;
+
+      dateRangePreview.hidden = false;
+    }
+
+    const today = new Date();
+    const todayValue = toLocalDateString(
+      today
+    );
+
+    startDateInput.value = todayValue;
+    deadlineInput.min = todayValue;
+
+    deadlineInput.addEventListener(
+      "change",
+      updateDeadlineDisplay
+    );
+  </script>
 </body>
 
 </html>
