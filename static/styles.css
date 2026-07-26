@@ -180,6 +180,51 @@ button {
   gap: 18px;
 }
 
+.roadmap-progress-rail {
+  width: min(100%, 1500px);
+  margin: 0 auto 14px;
+  padding: 0 2px;
+}
+
+.progress-strip-heading {
+  margin-bottom: 8px;
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  color: var(--ink);
+  font-family: "Patrick Hand", cursive;
+  font-size: 1rem;
+}
+
+.progress-strip-heading strong {
+  font-weight: 400;
+}
+
+.roadmap-progress-rail .progress-track {
+  height: 9px;
+  overflow: hidden;
+
+  border: 1.5px solid var(--ink);
+  border-radius: 999px;
+
+  background: var(--paper-light);
+}
+
+.roadmap-progress-rail .progress-value {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--ink);
+}
+
+.progress-strip-note {
+  margin: 7px 0 0;
+  color: var(--ink-soft);
+  font-size: 0.72rem;
+  line-height: 1.45;
+}
+
 .workspace.single-column {
   display: block;
 
@@ -200,45 +245,8 @@ button {
   box-shadow: var(--shadow);
 }
 
-.chat-panel {
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
 
-.setup-panel {
-  width: 100%;
-  height: 100%;
-}
-
-/* ---------------------------------------------------------
-   Panel headers
---------------------------------------------------------- */
-
-.chat-header,
-.roadmap-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.chat-header {
-  padding: 20px 26px 17px;
-  border-bottom: 1.5px solid var(--ink);
-}
-
-.section-label {
-  margin: 0 0 3px;
-
-  color: var(--ink-soft);
-  font-family: "Patrick Hand", cursive;
-  font-size: 1rem;
-  font-weight: 400;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.chat-header h2,
+  margin-top: 10px;
 .roadmap-header h2 {
   margin: 0;
 
@@ -439,6 +447,71 @@ input[type="file"]::file-selector-button:hover {
 .submit-button:active {
   transform: translate(4px, 4px);
   box-shadow: none;
+}
+
+.learning-style-field {
+  margin-top: 4px;
+  padding: 0;
+  border: 0;
+}
+
+.learning-style-field > span {
+  margin-bottom: 0;
+}
+
+.style-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.style-option {
+  display: block;
+  cursor: pointer;
+}
+
+.style-option input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.style-chip {
+  min-height: 100%;
+  padding: 13px 14px;
+
+  display: grid;
+  gap: 4px;
+
+  border: 1.5px solid var(--line-dark);
+  border-radius: 3px 10px 4px 9px;
+
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: 2px 2px 0 transparent;
+}
+
+.style-chip strong {
+  font-family: "Patrick Hand", cursive;
+  font-size: 1.05rem;
+  font-weight: 400;
+}
+
+.style-chip span {
+  color: var(--ink-soft);
+  font-size: 0.76rem;
+  line-height: 1.45;
+}
+
+.style-option input:checked + .style-chip {
+  border-color: var(--ink);
+  background: var(--paper);
+  box-shadow: 4px 4px 0 var(--paper-dark);
+}
+
+.style-option input:focus-visible + .style-chip {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
 }
 
 /* ---------------------------------------------------------
@@ -804,18 +877,101 @@ input[type="file"]::file-selector-button:hover {
   background: var(--paper-light);
 }
 
+.progress-strip {
+  margin-top: 10px;
+  margin-bottom: 12px;
+}
+
+.progress-strip-heading {
+  margin-bottom: 8px;
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  color: var(--ink);
+  font-family: "Patrick Hand", cursive;
+  font-size: 1rem;
+}
+
+.progress-strip-heading strong {
+  font-weight: 400;
+}
+
+.progress-track {
+  height: 9px;
+  overflow: hidden;
+
+  border: 1.5px solid var(--ink);
+  border-radius: 999px;
+
+  background: var(--paper-light);
+}
+
 .progress-value {
   height: 100%;
   border-radius: inherit;
   background: var(--ink);
 }
 
-.progress-card p {
-  margin: 11px 0 0;
+.learning-style-card {
+  margin-top: 12px;
+  font-family: "Patrick Hand", cursive;
+  font-size: 1.45rem;
+  font-weight: 400;
+}
+
+.learning-style-badge {
+  padding: 5px 10px;
+
+  border: 1.5px solid var(--ink);
+  border-radius: 999px;
+
+  color: var(--paper-light);
+  background: var(--ink);
+
+  font-family: "Patrick Hand", cursive;
+  font-size: 0.9rem;
+}
+
+.learning-style-summary {
+  margin: 10px 0 0;
 
   color: var(--ink-soft);
-  font-size: 0.72rem;
+  font-size: 0.8rem;
   line-height: 1.5;
+}
+
+.learning-style-highlights {
+  margin-top: 12px;
+
+  display: grid;
+  gap: 10px;
+}
+
+.learning-style-highlight {
+  padding: 10px 12px;
+
+  border: 1px solid var(--line-dark);
+  border-radius: 4px 10px 5px 9px;
+
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.learning-style-highlight strong {
+  display: block;
+
+  margin-bottom: 4px;
+
+  font-family: "Patrick Hand", cursive;
+  font-size: 1rem;
+  font-weight: 400;
+}
+
+.learning-style-highlight span {
+  color: var(--ink-soft);
+  font-size: 0.74rem;
+  line-height: 1.45;
 }
 
 .roadmap-list {
@@ -849,6 +1005,14 @@ input[type="file"]::file-selector-button:hover {
 
 .roadmap-item.current:hover {
   transform: translate(-1px, -1px);
+}
+
+.roadmap-style-note {
+  margin: 8px 0 0;
+
+  color: var(--ink-soft);
+  font-size: 0.72rem;
+  line-height: 1.45;
 }
 
 .roadmap-item.locked {
@@ -1085,6 +1249,10 @@ input[type="file"]::file-selector-button:hover {
   }
 
   .row-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .style-options {
     grid-template-columns: 1fr;
   }
 
