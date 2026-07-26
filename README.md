@@ -31,10 +31,10 @@ The MVP should focus on one polished, demo-ready happy path:
 - result cards for the generated plan
 - progress-oriented footer message
 
-### Gemini API usage
-The live Gemini integration lives in [app.py](app.py). It reads `GEMINI_API_KEY` from `.env`, uses `gemma-4-26b-a4b-it`, and includes a `thinking_config` plus a system instruction for the study-plan response. The chat flow is also implemented there in the `/api/chat` endpoint.
+### GEMMA API usage
+The live GEMMA  integration lives in [app.py](app.py). It reads `GEMMA_API_KEY` from `.env`, uses `gemma-4-26b-a4b-it`, and includes a `thinking_config` plus a system instruction for the study-plan response. The chat flow is also implemented there in the `/api/chat` endpoint.
 
-### Optional Gemini capabilities
+### Optional GEMMA capabilities
 The Step 7 items in the guide are optional SDK features. This app does not wire image upload, function calling, or search grounding into the product flow yet.
 
 ### Demo scenario
@@ -114,7 +114,7 @@ A working MVP starter has now been created for this repository.
 
 ### Limitations and exceptions
 - PDF parsing is not included in this starter version; the current demo path is optimized for .pptx, .docx, and .txt.
-- The Step 7 Gemini SDK features are documented in the guide but are not part of the current app flow.
+- The Step 7 Gemma SDK features are documented in the guide but are not part of the current app flow.
 - This is a demo-focused MVP, not a production-grade study assistant.
 
 ### How to run locally

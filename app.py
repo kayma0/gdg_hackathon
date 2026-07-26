@@ -27,12 +27,14 @@ BASE_DIR = Path(__file__).resolve().parent
 
 load_dotenv(BASE_DIR / ".env")
 
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
-GEMINI_MODEL = "gemma-4-26b-a4b-it"
 
-GEMINI_CLIENT = (
-    genai.Client(api_key=GEMINI_API_KEY)
-    if GEMINI_API_KEY
+GEMMA_API_KEY = os.getenv("GEMMA_API_KEY", "").strip()
+GEMMA_MODEL = "gemma-4-26b-a4b-it"
+GEMMA_CLIENT = genai.Client() if GEMMA_API_KEY else None
+
+GEMMA_CLIENT = (
+    genai.Client(api_key=GEMMA_API_KEY)
+    if GEMMA_API_KEY
     else None
 )
 
@@ -84,7 +86,7 @@ async def health() -> dict[str, str]:
         "status": "ok",
         "application": "ZEN",
         "gemma_configured": str(
-            GEMINI_CLIENT is not None
+            GEMMA_CLIENT is not None
         ).lower(),
     }
 
@@ -298,20 +300,8 @@ async def build_plan_with_gemma(
     study_minutes: int,
     raw_text: str,
     file_names: List[str],
-) -> dict[str, Any]:
-    """
-    Ask Gemma to generate the roadmap.
-
-    If the API is unavailable or returns invalid JSON,
-    ZEN uses a placeholder plan so the UI does not crash.
-    """
-
-    if GEMINI_CLIENT is None:
-        print(
-            "GEMINI_API_KEY is not configured. "
-            "Using placeholder roadmap."
-        )
-
+) -> dict:
+    if GEMMA_CLIENT is None:
         return generate_placeholder_plan(
             prompt=prompt,
             deadline=deadline,
@@ -320,168 +310,35 @@ async def build_plan_with_gemma(
             file_names=file_names,
         )
 
-    system_instruction = """
-You are ZEN, an adaptive study companion.
-
-Analyse the supplied school material and generate a realistic,
-day-by-day study roadmap.
-
-You must decide:
-
-- the major topics
-- prerequisite order
-- how topics should be divided across study days
-- each day's learning objectives
-- concise lesson content
-- three quiz questions for every day
-
-Return valid JSON only.
-Do not return markdown.
-Do not include text outside the JSON object.
-"""
-
-    source_files = (
-        ", ".join(file_names)
-        if file_names
-        else "No filenames supplied"
-    )
-
-    user_prompt = f"""
-LEARNER REQUEST:
-{prompt.strip() or "Help me make steady progress."}
-
-DEADLINE:
-{deadline.strip() or "Not specified"}
-
-STUDY TIME PER DAY:
-{study_minutes} minutes
-
-SOURCE FILES:
-{source_files}
-
-COURSE MATERIAL:
---- START MATERIAL ---
-{raw_text[:12000]}
---- END MATERIAL ---
-
-Return JSON using this exact structure:
-
-{{
-  "course_title": "string",
-  "course_summary": "string",
-  "learner_goal": "string",
-  "deadline": "string",
-  "minutes_per_day": {study_minutes},
-  "total_days": 4,
-  "midpoint_day": 2,
-  "current_day": 1,
-  "streak": 0,
-  "completed_days": [],
-  "weak_topics": [],
-  "focus_topics": [
-    "string"
-  ],
-  "roadmap": [
-    {{
-      "day": 1,
-      "title": "string",
-      "status": "available",
-      "estimated_minutes": {study_minutes},
-      "topics": [
-        "string"
-      ],
-      "objectives": [
-        "string"
-      ],
-      "lesson": {{
-        "introduction": "string",
-        "explanation": "string",
-        "example": "string",
-        "recap": [
-          "string"
-        ]
-      }},
-      "quiz": [
-        {{
-          "id": "day-1-q-1",
-          "topic": "string",
-          "question": "string",
-          "options": [
-            "string",
-            "string",
-            "string",
-            "string"
-          ],
-          "correct_answer": 0,
-          "explanation": "string"
-        }}
-      ]
-    }}
-  ],
-  "summary": "string",
-  "study_blocks": [
-    {{
-      "title": "string",
-      "focus": "string",
-      "time": "string",
-      "goal": "string"
-    }}
-  ],
-  "minimum_win": "string",
-  "motivation_note": "string",
-  "custom_prompt": "string",
-  "daily_time": "string"
-}}
-
-Important rules:
-
-1. Create exactly three quiz questions per day.
-2. Every quiz question must have exactly four options.
-3. correct_answer must be an integer from 0 to 3.
-4. Only Day 1 should have status "available".
-5. All later days should have status "locked".
-6. Keep the plan realistic for the learner's available time.
-7. Base the educational content on the supplied material.
-"""
-
     try:
-        response = (
-            GEMINI_CLIENT.models.generate_content(
-                model=GEMINI_MODEL,
-                contents=user_prompt,
-                config=types.GenerateContentConfig(
-                    system_instruction=(
-                        system_instruction
-                    ),
-                    temperature=0.2,
-                    thinking_config=(
-                        types.ThinkingConfig(
-                            thinking_level="high"
-                        )
-                    ),
+        response = GEMMA_CLIENT.models.generate_content(
+            model=GEMMA_MODEL,
+            config=types.GenerateContentConfig(
+                thinking_config=types.ThinkingConfig(
+                    thinking_level="high"
                 ),
-            )
+                system_instruction=(
+                    "You are ZEN, a supportive and "
+                    "concise study companion. Help "
+                    "the learner understand concepts, "
+                    "stay focused and take the next "
+                    "small study action."
+                ),
+            ),
+            contents=(
+                "Create a short study plan from the following input.\n"
+                f"Prompt: {prompt.strip() or 'Keep it small and realistic.'}\n"
+                f"Deadline: {deadline}\n"
+                f"Study time per day: {study_minutes} minutes\n"
+                f"Source files: {', '.join(file_names) if file_names else 'none'}\n"
+                f"Source text:\n{raw_text[:12000]}"
+            ),
         )
-
-        parsed_plan = parse_plan_response(
-            response.text or "",
-            study_minutes=study_minutes,
-            prompt=prompt,
-            deadline=deadline,
-        )
-
-        if parsed_plan is not None:
-            return parsed_plan
-
-        print(
-            "Gemma returned invalid roadmap JSON. "
-            "Using placeholder roadmap."
-        )
-
-    except Exception as exc:
-        print(
-            f"Gemma roadmap request failed: {exc}"
-        )
+        plan = parse_plan_response(response.text or "", study_minutes)
+        if plan is not None:
+            return plan
+    except Exception:
+        pass
 
     return generate_placeholder_plan(
         prompt=prompt,
@@ -492,487 +349,62 @@ Important rules:
     )
 
 
-def clean_json_response(
-    raw_response: str,
-) -> str:
+def parse_plan_response(raw_response: str, study_minutes: int) -> dict | None:
     cleaned = raw_response.strip()
 
-    cleaned = re.sub(
-        r"^```(?:json)?\s*",
-        "",
-        cleaned,
-        flags=re.IGNORECASE,
-    )
-
-    cleaned = re.sub(
-        r"\s*```$",
-        "",
-        cleaned,
-    )
-
-    return cleaned.strip()
-
-
-def parse_plan_response(
-    raw_response: str,
-    study_minutes: int,
-    prompt: str,
-    deadline: str,
-) -> dict[str, Any] | None:
-    cleaned = clean_json_response(
-        raw_response
-    )
+    if cleaned.startswith("```"):
+        cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned)
+        cleaned = re.sub(r"\s*```$", "", cleaned)
 
     try:
         parsed = json.loads(cleaned)
-    except json.JSONDecodeError as exc:
-        print(
-            f"Could not parse Gemma JSON: {exc}"
-        )
-        print(
-            f"Gemma response preview: "
-            f"{raw_response[:500]}"
-        )
+    except json.JSONDecodeError:
         return None
 
-    if not isinstance(parsed, dict):
+    focus_topics = parsed.get("focus_topics")
+    study_blocks = parsed.get("study_blocks")
+
+    if not isinstance(focus_topics, list) or not isinstance(study_blocks, list):
         return None
 
-    roadmap = parsed.get("roadmap")
-
-    if not isinstance(roadmap, list):
+    if not all(isinstance(topic, str) for topic in focus_topics):
         return None
 
-    if not roadmap:
+    if not all(isinstance(block, dict) for block in study_blocks):
         return None
-
-    valid_days: list[dict[str, Any]] = []
-
-    for index, day in enumerate(
-        roadmap,
-        start=1,
-    ):
-        if not isinstance(day, dict):
-            continue
-
-        topics = day.get("topics", [])
-        objectives = day.get(
-            "objectives",
-            [],
-        )
-        quiz = day.get("quiz", [])
-        lesson = day.get("lesson", {})
-
-        if not isinstance(topics, list):
-            topics = []
-
-        if not isinstance(objectives, list):
-            objectives = []
-
-        if not isinstance(quiz, list):
-            quiz = []
-
-        if not isinstance(lesson, dict):
-            lesson = {}
-
-        valid_questions: list[
-            dict[str, Any]
-        ] = []
-
-        for question_index, question in enumerate(
-            quiz[:3],
-            start=1,
-        ):
-            if not isinstance(question, dict):
-                continue
-
-            options = question.get(
-                "options",
-                [],
-            )
-
-            if not isinstance(options, list):
-                options = []
-
-            options = [
-                str(option)
-                for option in options[:4]
-            ]
-
-            while len(options) < 4:
-                options.append(
-                    f"Option {len(options) + 1}"
-                )
-
-            correct_answer = question.get(
-                "correct_answer",
-                0,
-            )
-
-            if not isinstance(
-                correct_answer,
-                int,
-            ):
-                correct_answer = 0
-
-            correct_answer = max(
-                0,
-                min(correct_answer, 3),
-            )
-
-            valid_questions.append(
-                {
-                    "id": str(
-                        question.get(
-                            "id",
-                            (
-                                f"day-{index}-q-"
-                                f"{question_index}"
-                            ),
-                        )
-                    ),
-                    "topic": str(
-                        question.get(
-                            "topic",
-                            topics[0]
-                            if topics
-                            else "Core concept",
-                        )
-                    ),
-                    "question": str(
-                        question.get(
-                            "question",
-                            "Review this topic.",
-                        )
-                    ),
-                    "options": options,
-                    "correct_answer": (
-                        correct_answer
-                    ),
-                    "explanation": str(
-                        question.get(
-                            "explanation",
-                            "",
-                        )
-                    ),
-                }
-            )
-
-        while len(valid_questions) < 3:
-            question_number = (
-                len(valid_questions) + 1
-            )
-
-            valid_questions.append(
-                {
-                    "id": (
-                        f"day-{index}-q-"
-                        f"{question_number}"
-                    ),
-                    "topic": (
-                        topics[0]
-                        if topics
-                        else "Core concept"
-                    ),
-                    "question": (
-                        "Which statement best "
-                        "matches this topic?"
-                    ),
-                    "options": [
-                        "The central idea",
-                        "An unrelated detail",
-                        "A file name",
-                        "A deadline",
-                    ],
-                    "correct_answer": 0,
-                    "explanation": (
-                        "The first option describes "
-                        "the central idea."
-                    ),
-                }
-            )
-
-        valid_days.append(
-            {
-                "day": index,
-                "title": str(
-                    day.get(
-                        "title",
-                        f"Study Day {index}",
-                    )
-                ),
-                "status": (
-                    "available"
-                    if index == 1
-                    else "locked"
-                ),
-                "estimated_minutes": int(
-                    day.get(
-                        "estimated_minutes",
-                        study_minutes,
-                    )
-                ),
-                "topics": [
-                    str(topic)
-                    for topic in topics
-                ],
-                "objectives": [
-                    str(objective)
-                    for objective in objectives
-                ],
-                "lesson": {
-                    "introduction": str(
-                        lesson.get(
-                            "introduction",
-                            "",
-                        )
-                    ),
-                    "explanation": str(
-                        lesson.get(
-                            "explanation",
-                            "",
-                        )
-                    ),
-                    "example": str(
-                        lesson.get(
-                            "example",
-                            "",
-                        )
-                    ),
-                    "recap": [
-                        str(item)
-                        for item in lesson.get(
-                            "recap",
-                            [],
-                        )
-                    ]
-                    if isinstance(
-                        lesson.get("recap", []),
-                        list,
-                    )
-                    else [],
-                },
-                "quiz": valid_questions,
-            }
-        )
-
-    if not valid_days:
-        return None
-
-    focus_topics = parsed.get(
-        "focus_topics",
-        [],
-    )
-
-    if not isinstance(focus_topics, list):
-        focus_topics = []
-
-    if not focus_topics:
-        for day in valid_days:
-            focus_topics.extend(
-                day["topics"]
-            )
-
-    focus_topics = list(
-        dict.fromkeys(
-            str(topic)
-            for topic in focus_topics
-            if str(topic).strip()
-        )
-    )[:6]
-
-    if not focus_topics:
-        focus_topics = ["Core concepts"]
-
-    total_days = len(valid_days)
-
-    study_blocks = parsed.get(
-        "study_blocks",
-        [],
-    )
-
-    if not isinstance(study_blocks, list):
-        study_blocks = []
-
-    if not study_blocks:
-        study_blocks = [
-            {
-                "title": (
-                    f"Day {day['day']}: "
-                    f"{day['title']}"
-                ),
-                "focus": ", ".join(
-                    day["topics"]
-                ),
-                "time": (
-                    f"{day['estimated_minutes']} "
-                    "minutes"
-                ),
-                "goal": (
-                    day["objectives"][0]
-                    if day["objectives"]
-                    else "Complete today's lesson."
-                ),
-            }
-            for day in valid_days
-        ]
 
     return {
-        "course_title": str(
-            parsed.get(
-                "course_title",
-                "ZEN Study Roadmap",
-            )
-        ),
-        "course_summary": str(
-            parsed.get(
-                "course_summary",
-                parsed.get(
-                    "summary",
-                    "Your roadmap is ready.",
-                ),
-            )
-        ),
-        "learner_goal": str(
-            parsed.get(
-                "learner_goal",
-                prompt.strip()
-                or "Make steady progress.",
-            )
-        ),
-        "deadline": str(
-            parsed.get(
-                "deadline",
-                deadline,
-            )
-        ),
-        "minutes_per_day": study_minutes,
-        "total_days": total_days,
-        "midpoint_day": max(
-            1,
-            math.ceil(total_days / 2),
-        ),
-        "current_day": 1,
-        "streak": 0,
-        "completed_days": [],
-        "weak_topics": [],
-        "focus_topics": focus_topics,
-        "roadmap": valid_days,
-        "summary": str(
-            parsed.get(
-                "summary",
-                "Your study roadmap is ready.",
-            )
-        ),
-        "study_blocks": study_blocks,
-        "minimum_win": str(
-            parsed.get(
-                "minimum_win",
-                (
-                    "Spend 10 minutes reviewing "
-                    "the first topic."
-                ),
-            )
-        ),
-        "motivation_note": str(
-            parsed.get(
-                "motivation_note",
-                (
-                    "Start small and keep "
-                    "moving forward."
-                ),
-            )
-        ),
-        "custom_prompt": str(
-            parsed.get(
-                "custom_prompt",
-                prompt.strip()
-                or "Keep it realistic.",
-            )
-        ),
-        "daily_time": str(
-            parsed.get(
-                "daily_time",
-                f"{study_minutes} minutes per day",
-            )
-        ),
+        "summary": parsed.get("summary") if isinstance(parsed.get("summary"), str) else "Your study plan is ready.",
+        "focus_topics": focus_topics[:4],
+        "study_blocks": study_blocks[:4],
+        "minimum_win": parsed.get("minimum_win") if isinstance(parsed.get("minimum_win"), str) else "Spend 10 minutes reviewing the main topic.",
+        "motivation_note": parsed.get("motivation_note") if isinstance(parsed.get("motivation_note"), str) else "Start small and keep moving.",
+        "custom_prompt": parsed.get("custom_prompt") if isinstance(parsed.get("custom_prompt"), str) else "Keep it small and realistic.",
+        "daily_time": parsed.get("daily_time") if isinstance(parsed.get("daily_time"), str) else f"{study_minutes} minutes per day",
     }
 
 
-# ---------------------------------------------------------
-# Gemma chat
-# ---------------------------------------------------------
-
-async def build_chat_response(
-    message: str,
-    follow_up: str = "",
-) -> dict[str, str]:
-    if GEMINI_CLIENT is None:
+async def build_chat_response(message: str, follow_up: str = "") -> dict:
+    if GEMMA_CLIENT is None:
         return {
-            "first_reply": (
-                "The ZEN chat interface is working, "
-                "but GEMINI_API_KEY is not configured."
-            ),
+            "first_reply": "GEMINI_API_KEY is not configured.",
             "follow_up_reply": "",
         }
 
     try:
-        chat = GEMINI_CLIENT.chats.create(
-            model=GEMINI_MODEL,
-            config=types.GenerateContentConfig(
-                system_instruction=(
-                    "You are ZEN, a supportive and "
-                    "concise study companion. Help "
-                    "the learner understand concepts, "
-                    "stay focused and take the next "
-                    "small study action."
-                ),
-                temperature=0.4,
-            ),
-        )
-
-        first_response = chat.send_message(
-            message
-        )
-
-        first_reply = (
-            first_response.text or ""
-        ).strip()
-
-        follow_up_reply = ""
-
-        if follow_up:
-            second_response = chat.send_message(
-                follow_up
-            )
-
-            follow_up_reply = (
-                second_response.text or ""
-            ).strip()
+        chat = GEMMA_CLIENT.chats.create(model=GEMMA_MODEL)
+        first_reply = chat.send_message(message).text or ""
+        follow_up_reply = chat.send_message(follow_up).text if follow_up.strip() else ""
 
         return {
-            "first_reply": (
-                first_reply
-                or "I could not generate a reply."
-            ),
-            "follow_up_reply": (
-                follow_up_reply
-            ),
+            "first_reply": first_reply,
+            "follow_up_reply": follow_up_reply or "",
         }
-
-    except Exception as exc:
-        print(
-            f"Gemma chat request failed: {exc}"
-        )
-
+    except Exception:
         return {
-            "first_reply": (
-                "Sorry, ZEN could not complete "
-                "that chat request."
-            ),
+            "first_reply": "Sorry, the Gemma chat request failed.",
             "follow_up_reply": "",
         }
-
 
 # ---------------------------------------------------------
 # File extraction
