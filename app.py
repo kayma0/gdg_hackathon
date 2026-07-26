@@ -169,8 +169,139 @@ LEARNING_STYLE_LIBRARY: dict[str, dict[str, str]] = {
 }
 
 # ---------------------------------------------------------
-# Page routes
+# Demo hardcoded responses (OS course material)
+# Each entry: list of keyword triggers -> reply text
 # ---------------------------------------------------------
+
+DEMO_RESPONSES: list[tuple[list[str], str]] = [
+    (
+        ["what is a process", "define process", "explain process"],
+        "A process is a program in execution. It includes the program code, "
+        "its current activity (represented by the program counter), a stack, "
+        "a data section, and a heap. Each process has its own memory space and "
+        "is isolated from other processes. The OS manages processes using a "
+        "Process Control Block (PCB), which stores the process state, PID, "
+        "CPU registers, memory limits, and scheduling information.",
+    ),
+    (
+        ["what is a thread", "define thread", "explain thread"],
+        "A thread is the smallest unit of CPU execution within a process. "
+        "Unlike processes, threads within the same process share the same "
+        "memory space and resources (code, data, open files), but each thread "
+        "has its own stack and register set. This makes thread creation and "
+        "context switching much cheaper than doing the same for full processes. "
+        "Multi-threading allows a program to perform multiple tasks concurrently.",
+    ),
+    (
+        ["difference between process and thread", "process vs thread", "process and thread"],
+        "Processes and threads are both units of execution, but they differ in key ways:\n"
+        "- Memory: each process has its own address space; threads share the address space of their parent process.\n"
+        "- Overhead: creating a process is expensive (full memory copy); creating a thread is lightweight.\n"
+        "- Communication: processes use IPC (pipes, sockets, shared memory); threads communicate directly through shared variables.\n"
+        "- Isolation: a crash in one process does not affect others; a crash in one thread can bring down the whole process.",
+    ),
+    (
+        ["context switch", "what happens during a context switch"],
+        "A context switch is the mechanism by which the OS saves the state of a "
+        "running process (or thread) and restores the state of another so the CPU "
+        "can be shared. During a context switch the OS saves the current PCB "
+        "(registers, program counter, stack pointer), selects the next process via "
+        "the scheduler, and loads its PCB. Context switches are triggered by "
+        "interrupts, system calls, or the expiry of a time-slice. They add overhead "
+        "because no useful work is done while switching.",
+    ),
+    (
+        ["memory management", "what is memory management"],
+        "Memory management is the OS function responsible for allocating and "
+        "de-allocating memory regions to processes. Key goals are:\n"
+        "- Keeping multiple processes in memory at the same time (multiprogramming).\n"
+        "- Protecting each process's memory from others.\n"
+        "- Providing the abstraction of a large, private address space to each process (virtual memory).\n"
+        "Techniques include contiguous allocation, segmentation, and paging. "
+        "Modern systems use paging combined with a page table to map virtual addresses to physical frames.",
+    ),
+    (
+        ["virtual memory", "what is virtual memory"],
+        "Virtual memory is an abstraction that gives each process the illusion of "
+        "having a large, contiguous private address space, even if physical RAM is "
+        "limited. The OS (with MMU hardware support) maps virtual pages to physical "
+        "frames on demand. Pages not currently needed are stored on disk (swap space) "
+        "and brought into RAM when accessed — this is called a page fault. "
+        "Virtual memory allows programs larger than physical RAM to run and improves "
+        "security through address-space isolation.",
+    ),
+    (
+        ["page table", "what is a page table", "explain page table"],
+        "A page table is a data structure maintained by the OS that maps a process's "
+        "virtual page numbers to physical frame numbers in RAM. When the CPU generates "
+        "a virtual address, the MMU splits it into a page number and an offset, looks "
+        "up the page table to find the physical frame, and combines it with the offset "
+        "to get the physical address. Each entry also stores status bits: valid/present, "
+        "dirty (modified), and referenced. Large address spaces use multi-level page "
+        "tables or inverted page tables to reduce memory overhead.",
+    ),
+    (
+        ["paging", "how does paging work", "what is paging"],
+        "Paging divides physical memory into fixed-size blocks called frames and "
+        "divides a process's logical memory into same-sized blocks called pages. "
+        "When a process runs, its pages are loaded into any available frames — they "
+        "do not need to be contiguous. The OS maintains a page table per process to "
+        "track which virtual page maps to which physical frame. Paging eliminates "
+        "external fragmentation but can cause internal fragmentation (unused space "
+        "at the end of the last page). The TLB (Translation Lookaside Buffer) caches "
+        "recent page-table lookups to speed up address translation.",
+    ),
+    (
+        ["tlb", "translation lookaside buffer"],
+        "The Translation Lookaside Buffer (TLB) is a small, fast hardware cache "
+        "inside the MMU that stores recent virtual-to-physical page mappings. "
+        "On each memory access the MMU checks the TLB first (a TLB hit) — if found, "
+        "the physical address is returned in one cycle. If not found (a TLB miss), "
+        "the full page table must be walked, which is much slower. The TLB is "
+        "flushed on a context switch (or tagged with Address Space IDs to avoid "
+        "flushing). A high TLB hit rate is essential for good performance.",
+    ),
+    (
+        ["page fault", "what is a page fault"],
+        "A page fault occurs when a process accesses a virtual page that is not "
+        "currently loaded in physical memory (its present bit in the page table is 0). "
+        "The hardware raises a trap to the OS page-fault handler, which:\n"
+        "1. Finds a free frame (or evicts an existing page using a replacement algorithm such as LRU).\n"
+        "2. Loads the required page from disk into the frame.\n"
+        "3. Updates the page table and restarts the faulting instruction.\n"
+        "Page faults are expensive (disk I/O latency) so the OS tries to minimise them "
+        "through prefetching and good replacement policies.",
+    ),
+    (
+        ["process scheduling", "cpu scheduling", "scheduling algorithm"],
+        "CPU scheduling decides which ready process gets the CPU next. Common algorithms:\n"
+        "- FCFS (First-Come First-Served): simple but can cause the convoy effect.\n"
+        "- SJF (Shortest Job First): optimal average waiting time but requires knowing burst time.\n"
+        "- Round Robin: each process gets a fixed time-slice (quantum); fair but more context switches.\n"
+        "- Priority Scheduling: higher-priority processes run first; can starve low-priority ones.\n"
+        "- Multilevel Queue / Feedback Queue: combines several policies for different process types.\n"
+        "The scheduler runs on every interrupt, system call, and time-slice expiry.",
+    ),
+    (
+        ["deadlock", "what is deadlock"],
+        "A deadlock is a situation where a set of processes are each waiting for a "
+        "resource held by another process in the set, so none can proceed. The four "
+        "necessary conditions (Coffman conditions) are: mutual exclusion, hold-and-wait, "
+        "no pre-emption, and circular wait. Strategies to deal with deadlock:\n"
+        "- Prevention: eliminate one of the four conditions.\n"
+        "- Avoidance: use Banker's Algorithm to only grant requests that keep the system safe.\n"
+        "- Detection and recovery: allow deadlocks, detect them with a resource-allocation graph, "
+        "then recover by killing a process or pre-empting a resource.",
+    ),
+]
+
+
+def find_demo_response(message: str) -> str | None:
+    normalised = message.lower().strip()
+    for triggers, reply in DEMO_RESPONSES:
+        if any(trigger in normalised for trigger in triggers):
+            return reply
+    return None
 
 
 @app.get(
@@ -2056,6 +2187,15 @@ async def build_chat_response(
     context: str = "",
     uploaded_files: list[Any] | None = None,
 ) -> dict[str, str]:
+    # Check hardcoded demo responses first (works without API key)
+    demo_reply = find_demo_response(message)
+    if demo_reply:
+        follow_up_demo = find_demo_response(follow_up) if follow_up else ""
+        return {
+            "first_reply": demo_reply,
+            "follow_up_reply": follow_up_demo or "",
+        }
+
     if GEMINI_CLIENT is None:
         return {
             "first_reply": (
