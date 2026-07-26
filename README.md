@@ -114,7 +114,7 @@ A working MVP starter has now been created for this repository.
 
 ### Limitations and exceptions
 - PDF parsing is not included in this starter version; the current demo path is optimized for .pptx, .docx, and .txt.
-- The Step 7 Gemini SDK features are documented in the guide but are not part of the current app flow.
+- The Step 7 Gemma SDK features are documented in the guide but are not part of the current app flow.
 - This is a demo-focused MVP, not a production-grade study assistant.
 
 ### How to run locally
