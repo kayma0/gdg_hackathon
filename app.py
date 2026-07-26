@@ -25,6 +25,7 @@ from fastapi.templating import Jinja2Templates
 from google import genai
 from google.genai import types
 from pptx import Presentation
+from pydantic import BaseModel
 
 
 # ---------------------------------------------------------
@@ -66,9 +67,23 @@ templates = Jinja2Templates(
 )
 
 
+class LessonRequest(BaseModel):
+    day: int
+    study_date: str
+    title: str
+    topics: list[str]
+    objectives: list[str]
+    estimated_minutes: int
+
+
+class GradeRequest(BaseModel):
+    lesson: dict[str, Any]
+    selected_answers: list[int]
+
 # ---------------------------------------------------------
 # Page routes
 # ---------------------------------------------------------
+
 
 @app.get(
     "/",
@@ -224,9 +239,138 @@ async def chat_api(
     )
 
 
+@app.post("/api/lesson")
+async def generate_lesson_api(
+    lesson_request: LessonRequest,
+) -> JSONResponse:
+    lesson = await generate_level_with_gemma(
+        day=lesson_request.day,
+        study_date=lesson_request.study_date,
+        title=lesson_request.title,
+        topics=lesson_request.topics,
+        objectives=lesson_request.objectives,
+        estimated_minutes=lesson_request.estimated_minutes,
+    )
+
+    return JSONResponse(lesson)
+
+
+@app.post("/api/grade")
+async def grade_lesson_api(
+    grade_request: GradeRequest,
+) -> JSONResponse:
+    quiz = grade_request.lesson.get("quiz", [])
+    selected_answers = grade_request.selected_answers
+
+    if not isinstance(quiz, list) or not quiz:
+        raise HTTPException(
+            status_code=400,
+            detail="The lesson does not contain a quiz.",
+        )
+
+    results: list[dict[str, Any]] = []
+    correct_count = 0
+
+    for index, question in enumerate(quiz):
+        selected_answer = (
+            selected_answers[index]
+            if index < len(selected_answers)
+            else -1
+        )
+
+        correct_answer = int(
+            question.get("correct_answer", 0)
+        )
+
+        is_correct = (
+            selected_answer == correct_answer
+        )
+
+        if is_correct:
+            correct_count += 1
+
+        options = question.get("options", [])
+
+        selected_text = (
+            options[selected_answer]
+            if (
+                isinstance(options, list)
+                and 0 <= selected_answer < len(options)
+            )
+            else "No answer selected"
+        )
+
+        correct_text = (
+            options[correct_answer]
+            if (
+                isinstance(options, list)
+                and 0 <= correct_answer < len(options)
+            )
+            else ""
+        )
+
+        results.append(
+            {
+                "question": question.get(
+                    "question",
+                    "",
+                ),
+                "topic": question.get(
+                    "topic",
+                    "",
+                ),
+                "selected_answer": selected_text,
+                "correct_answer": correct_text,
+                "is_correct": is_correct,
+                "explanation": question.get(
+                    "explanation",
+                    "",
+                ),
+            }
+        )
+
+    total_questions = len(quiz)
+
+    score = round(
+        (
+            correct_count /
+            total_questions
+        ) * 100
+    )
+
+    weak_topics = list(
+        dict.fromkeys(
+            result["topic"]
+            for result in results
+            if (
+                not result["is_correct"]
+                and result["topic"]
+            )
+        )
+    )
+
+    feedback = await generate_quiz_feedback_with_gemma(
+        lesson=grade_request.lesson,
+        score=score,
+        results=results,
+        weak_topics=weak_topics,
+    )
+
+    return JSONResponse(
+        {
+            "score": score,
+            "correct_count": correct_count,
+            "total_questions": total_questions,
+            "results": results,
+            "weak_topics": weak_topics,
+            "feedback": feedback,
+        }
+    )
+
 # ---------------------------------------------------------
 # Date helpers
 # ---------------------------------------------------------
+
 
 def parse_iso_date(
     value: str,
@@ -1278,9 +1422,545 @@ async def build_chat_response(
         }
 
 
+async def generate_level_with_gemma(
+    day: int,
+    study_date: str,
+    title: str,
+    topics: list[str],
+    objectives: list[str],
+    estimated_minutes: int,
+) -> dict[str, Any]:
+    """
+    Generate one finishable learning level based strictly on
+    the roadmap topics clicked by the learner.
+    """
+
+    if GEMINI_CLIENT is None:
+        return generate_placeholder_level(
+            day=day,
+            study_date=study_date,
+            title=title,
+            topics=topics,
+            objectives=objectives,
+            estimated_minutes=estimated_minutes,
+        )
+
+    safe_minutes = max(
+        10,
+        min(estimated_minutes, 90),
+    )
+
+    system_instruction = """
+You are ZEN, an adaptive study teacher.
+
+The learner has clicked one level from a roadmap that was already
+generated from their course material.
+
+Create a focused micro-course that can be completed today.
+
+You must teach only the supplied roadmap topics and objectives.
+Do not replace them with unrelated subjects.
+Do not create an entire semester course.
+Do not mention that you are an AI.
+
+Return valid JSON only.
+Do not include markdown fences or text outside the JSON object.
+"""
+
+    prompt = f"""
+ROADMAP LEVEL:
+Day {day}
+
+ASSIGNED DATE:
+{study_date}
+
+LEVEL TITLE:
+{title}
+
+MANDATORY TOPICS:
+{json.dumps(topics, ensure_ascii=False)}
+
+MANDATORY OBJECTIVES:
+{json.dumps(objectives, ensure_ascii=False)}
+
+AVAILABLE TIME:
+{safe_minutes} minutes
+
+Create a complete but concise one-day learning level.
+
+The learner must be able to finish the explanation, activity and quiz
+within {safe_minutes} minutes.
+
+Return this exact JSON structure:
+
+{{
+  "day": {day},
+  "study_date": "{study_date}",
+  "title": "string",
+  "estimated_minutes": {safe_minutes},
+  "topics": ["string"],
+  "welcome": "string",
+  "sections": [
+    {{
+      "heading": "string",
+      "explanation": "string",
+      "key_points": [
+        "string",
+        "string"
+      ],
+      "example": "string"
+    }}
+  ],
+  "practice_activity": {{
+    "title": "string",
+    "instructions": "string",
+    "expected_minutes": 5
+  }},
+  "quick_recap": [
+    "string",
+    "string",
+    "string"
+  ],
+  "quiz": [
+    {{
+      "id": "level-{day}-q-1",
+      "topic": "string",
+      "question": "string",
+      "options": [
+        "string",
+        "string",
+        "string",
+        "string"
+      ],
+      "correct_answer": 0,
+      "explanation": "string"
+    }}
+  ]
+}}
+
+Rules:
+
+1. Use the supplied topics exactly as the subject of the lesson.
+2. Create 2 to 4 short teaching sections.
+3. Create exactly 3 multiple-choice quiz questions.
+4. Every question must have exactly 4 options.
+5. correct_answer must be an integer from 0 to 3.
+6. The whole learning level must fit within {safe_minutes} minutes.
+7. Use simple language and concrete examples.
+8. The quiz must test the explanations actually taught.
+"""
+
+    try:
+        response = GEMINI_CLIENT.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                system_instruction=system_instruction,
+                temperature=0.25,
+                response_mime_type="application/json",
+                thinking_config=types.ThinkingConfig(
+                    thinking_level="high"
+                ),
+            ),
+        )
+
+        cleaned = clean_json_response(
+            response.text or ""
+        )
+
+        parsed = json.loads(cleaned)
+
+        validated = validate_generated_level(
+            parsed=parsed,
+            day=day,
+            study_date=study_date,
+            title=title,
+            topics=topics,
+            estimated_minutes=safe_minutes,
+        )
+
+        if validated:
+            return validated
+
+    except Exception as exc:
+        print(
+            f"Gemma level generation failed: {exc}"
+        )
+
+    return generate_placeholder_level(
+        day=day,
+        study_date=study_date,
+        title=title,
+        topics=topics,
+        objectives=objectives,
+        estimated_minutes=safe_minutes,
+    )
+
+
+def validate_generated_level(
+    parsed: Any,
+    day: int,
+    study_date: str,
+    title: str,
+    topics: list[str],
+    estimated_minutes: int,
+) -> dict[str, Any] | None:
+    if not isinstance(parsed, dict):
+        return None
+
+    sections = parsed.get("sections", [])
+    quiz = parsed.get("quiz", [])
+    quick_recap = parsed.get("quick_recap", [])
+    activity = parsed.get(
+        "practice_activity",
+        {},
+    )
+
+    if not isinstance(sections, list):
+        return None
+
+    if not isinstance(quiz, list):
+        return None
+
+    if not isinstance(quick_recap, list):
+        quick_recap = []
+
+    if not isinstance(activity, dict):
+        activity = {}
+
+    clean_sections = []
+
+    for section in sections[:4]:
+        if not isinstance(section, dict):
+            continue
+
+        key_points = section.get(
+            "key_points",
+            [],
+        )
+
+        if not isinstance(key_points, list):
+            key_points = []
+
+        clean_sections.append(
+            {
+                "heading": str(
+                    section.get(
+                        "heading",
+                        "Key concept",
+                    )
+                ),
+                "explanation": str(
+                    section.get(
+                        "explanation",
+                        "",
+                    )
+                ),
+                "key_points": [
+                    str(point)
+                    for point in key_points[:5]
+                ],
+                "example": str(
+                    section.get(
+                        "example",
+                        "",
+                    )
+                ),
+            }
+        )
+
+    clean_quiz = []
+
+    for index, question in enumerate(
+        quiz[:3],
+        start=1,
+    ):
+        if not isinstance(question, dict):
+            continue
+
+        options = question.get(
+            "options",
+            [],
+        )
+
+        if not isinstance(options, list):
+            options = []
+
+        options = [
+            str(option)
+            for option in options[:4]
+        ]
+
+        while len(options) < 4:
+            options.append(
+                f"Option {len(options) + 1}"
+            )
+
+        correct_answer = safe_integer(
+            question.get(
+                "correct_answer",
+                0,
+            ),
+            0,
+        )
+
+        correct_answer = max(
+            0,
+            min(correct_answer, 3),
+        )
+
+        clean_quiz.append(
+            {
+                "id": str(
+                    question.get(
+                        "id",
+                        f"level-{day}-q-{index}",
+                    )
+                ),
+                "topic": str(
+                    question.get(
+                        "topic",
+                        topics[0]
+                        if topics
+                        else title,
+                    )
+                ),
+                "question": str(
+                    question.get(
+                        "question",
+                        "Which answer is correct?",
+                    )
+                ),
+                "options": options,
+                "correct_answer": correct_answer,
+                "explanation": str(
+                    question.get(
+                        "explanation",
+                        "",
+                    )
+                ),
+            }
+        )
+
+    if not clean_sections or len(clean_quiz) != 3:
+        return None
+
+    return {
+        "day": day,
+        "study_date": study_date,
+        "title": str(
+            parsed.get(
+                "title",
+                title,
+            )
+        ),
+        "estimated_minutes": estimated_minutes,
+        "topics": topics,
+        "welcome": str(
+            parsed.get(
+                "welcome",
+                (
+                    "This level is designed "
+                    "to be completed today."
+                ),
+            )
+        ),
+        "sections": clean_sections,
+        "practice_activity": {
+            "title": str(
+                activity.get(
+                    "title",
+                    "Quick practice",
+                )
+            ),
+            "instructions": str(
+                activity.get(
+                    "instructions",
+                    (
+                        "Explain the main idea "
+                        "in your own words."
+                    ),
+                )
+            ),
+            "expected_minutes": max(
+                2,
+                min(
+                    safe_integer(
+                        activity.get(
+                            "expected_minutes",
+                            5,
+                        ),
+                        5,
+                    ),
+                    15,
+                ),
+            ),
+        },
+        "quick_recap": [
+            str(point)
+            for point in quick_recap[:5]
+        ],
+        "quiz": clean_quiz,
+    }
+
+
+async def generate_quiz_feedback_with_gemma(
+    lesson: dict[str, Any],
+    score: int,
+    results: list[dict[str, Any]],
+    weak_topics: list[str],
+) -> dict[str, Any]:
+    if GEMINI_CLIENT is None:
+        return {
+            "headline": (
+                "Level complete"
+                if score >= 70
+                else "A little review will help"
+            ),
+            "summary": (
+                f"You scored {score}%. "
+                "Review the explanations for any "
+                "questions you missed."
+            ),
+            "next_step": (
+                "Continue to the next level."
+                if score >= 70
+                else (
+                    "Review your weakest topic "
+                    "before moving on."
+                )
+            ),
+        }
+
+    prompt = f"""
+You are ZEN, a supportive learning evaluator.
+
+LESSON TITLE:
+{lesson.get("title", "")}
+
+LESSON TOPICS:
+{json.dumps(lesson.get("topics", []), ensure_ascii=False)}
+
+SCORE:
+{score}%
+
+QUESTION RESULTS:
+{json.dumps(results, ensure_ascii=False)}
+
+WEAK TOPICS:
+{json.dumps(weak_topics, ensure_ascii=False)}
+
+Give concise, encouraging feedback.
+
+Return valid JSON only:
+
+{{
+  "headline": "string",
+  "summary": "string",
+  "strengths": ["string"],
+  "weaknesses": ["string"],
+  "next_step": "string"
+}}
+"""
+
+    try:
+        response = GEMINI_CLIENT.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                temperature=0.25,
+                response_mime_type="application/json",
+            ),
+        )
+
+        parsed = json.loads(
+            clean_json_response(
+                response.text or ""
+            )
+        )
+
+        if isinstance(parsed, dict):
+            return parsed
+
+    except Exception as exc:
+        print(
+            f"Gemma feedback generation failed: {exc}"
+        )
+
+    return {
+        "headline": "Level complete",
+        "summary": f"You scored {score}%.",
+        "strengths": [],
+        "weaknesses": weak_topics,
+        "next_step": (
+            "Review weak topics, then continue."
+        ),
+    }
+
+
+def generate_placeholder_level(
+    day: int,
+    study_date: str,
+    title: str,
+    topics: list[str],
+    objectives: list[str],
+    estimated_minutes: int,
+) -> dict[str, Any]:
+    primary_topic = (
+        topics[0]
+        if topics
+        else title
+    )
+
+    return {
+        "day": day,
+        "study_date": study_date,
+        "title": title,
+        "estimated_minutes": estimated_minutes,
+        "topics": topics,
+        "welcome": (
+            "This focused level can be "
+            "completed in one sitting."
+        ),
+        "sections": [
+            {
+                "heading": (
+                    f"Understanding {primary_topic}"
+                ),
+                "explanation": (
+                    f"Begin by reviewing the main "
+                    f"ideas behind {primary_topic}."
+                ),
+                "key_points": objectives[:3],
+                "example": (
+                    "Connect this concept to an "
+                    "example from your uploaded notes."
+                ),
+            }
+        ],
+        "practice_activity": {
+            "title": "Explain it simply",
+            "instructions": (
+                f"Explain {primary_topic} as though "
+                "you were teaching it to a friend."
+            ),
+            "expected_minutes": 5,
+        },
+        "quick_recap": objectives[:3],
+        "quiz": create_placeholder_quiz(
+            day_number=day,
+            topic=primary_topic,
+            next_topic=(
+                topics[1]
+                if len(topics) > 1
+                else primary_topic
+            ),
+        ),
+    }
 # ---------------------------------------------------------
 # File extraction
 # ---------------------------------------------------------
+
 
 async def extract_text_from_upload(
     uploaded_file: UploadFile,

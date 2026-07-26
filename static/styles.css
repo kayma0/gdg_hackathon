@@ -1498,3 +1498,559 @@ input[type="file"]::file-selector-button:hover {
     align-items: flex-start;
   }
 }
+/* ---------------------------------------------------------
+   Interactive learning levels
+--------------------------------------------------------- */
+
+.level-button {
+  width: 100%;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.level-button.locked {
+  cursor: pointer;
+}
+
+.level-button:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: 5px 5px 0 var(--paper-dark);
+}
+
+body.lesson-open {
+  overflow: hidden;
+}
+
+/* ---------------------------------------------------------
+   Lesson overlay
+--------------------------------------------------------- */
+
+.lesson-overlay {
+  position: fixed;
+  z-index: 1000;
+  inset: 0;
+
+  padding: 22px;
+
+  background: rgba(31, 33, 31, 0.72);
+  overflow-y: auto;
+}
+
+.lesson-overlay[hidden] {
+  display: none;
+}
+
+.lesson-notebook {
+  width: min(1050px, 100%);
+  min-height: calc(100vh - 44px);
+  margin: 0 auto;
+
+  border: 2px solid var(--ink);
+  border-radius: 5px 17px 7px 15px;
+
+  color: var(--ink);
+  background-color: var(--paper-light);
+  background-image: linear-gradient(
+    rgba(55, 57, 54, 0.06) 1px,
+    transparent 1px
+  );
+
+  background-size: 100% 34px;
+  box-shadow: 8px 8px 0 rgba(0, 0, 0, 0.28);
+}
+
+.lesson-toolbar {
+  position: sticky;
+  z-index: 5;
+  top: 0;
+
+  padding: 18px 24px;
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  border-bottom: 2px solid var(--ink);
+  background: var(--paper-light);
+}
+
+.lesson-toolbar h2 {
+  margin: 0;
+
+  font-family: "Patrick Hand", cursive;
+  font-size: 1.7rem;
+  font-weight: 400;
+}
+
+.lesson-close-button {
+  width: 42px;
+  height: 42px;
+
+  border: 1.5px solid var(--ink);
+  border-radius: 50%;
+
+  color: var(--ink);
+  background: var(--paper-light);
+
+  font-size: 1.5rem;
+}
+
+.lesson-close-button:hover {
+  color: var(--paper-light);
+  background: var(--ink);
+}
+
+.lesson-loading,
+.lesson-error {
+  min-height: 500px;
+  padding: 60px 24px;
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+
+  text-align: center;
+}
+
+.writing-animation {
+  width: 160px;
+  height: 50px;
+  margin-bottom: 24px;
+
+  position: relative;
+
+  border-bottom: 2px solid var(--ink);
+}
+
+.writing-animation span {
+  position: absolute;
+  bottom: 7px;
+  left: 0;
+
+  width: 45px;
+  height: 3px;
+
+  background: var(--ink);
+
+  animation: writing-motion 1.4s infinite;
+}
+
+@keyframes writing-motion {
+  0% {
+    left: 0;
+    width: 25px;
+  }
+
+  50% {
+    left: 75px;
+    width: 55px;
+  }
+
+  100% {
+    left: 130px;
+    width: 20px;
+  }
+}
+
+.lesson-loading h3,
+.lesson-error h3 {
+  margin: 0 0 8px;
+
+  font-family: "Patrick Hand", cursive;
+  font-size: 1.55rem;
+  font-weight: 400;
+}
+
+.lesson-content {
+  padding: 34px clamp(22px, 6vw, 72px) 70px;
+}
+
+.lesson-content[hidden] {
+  display: none;
+}
+
+.lesson-cover {
+  padding: 26px 0 30px;
+
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 30px;
+
+  border-bottom: 2px solid var(--ink);
+}
+
+.handwritten-label {
+  margin: 0 0 4px;
+
+  color: var(--ink-soft);
+
+  font-family: "Patrick Hand", cursive;
+  font-size: 1rem;
+}
+
+.lesson-cover h2 {
+  margin: 0 0 10px;
+
+  font-family: "Patrick Hand", cursive;
+  font-size: clamp(2rem, 5vw, 3.2rem);
+  font-weight: 400;
+  line-height: 1;
+}
+
+.lesson-cover p:last-child {
+  max-width: 650px;
+  margin: 0;
+  line-height: 1.6;
+}
+
+.lesson-time-note {
+  width: 90px;
+  min-height: 90px;
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+
+  border: 1.5px solid var(--ink);
+  border-radius: 50%;
+
+  transform: rotate(2deg);
+}
+
+.lesson-time-note strong {
+  font-family: "Patrick Hand", cursive;
+  font-size: 2rem;
+  font-weight: 400;
+}
+
+.lesson-time-note span {
+  font-size: 0.7rem;
+}
+
+.lesson-topic-tags {
+  padding: 18px 0;
+
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.lesson-topic-tags span {
+  padding: 5px 9px;
+
+  border-bottom: 2px solid var(--ink);
+
+  font-family: "Patrick Hand", cursive;
+  font-size: 1rem;
+}
+
+.course-sections {
+  display: grid;
+  gap: 25px;
+}
+
+.course-section {
+  padding: 20px 0;
+
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  gap: 16px;
+
+  border-bottom: 1.5px dashed var(--line-dark);
+}
+
+.course-section-number {
+  width: 38px;
+  height: 38px;
+
+  display: grid;
+  place-items: center;
+
+  border: 1.5px solid var(--ink);
+  border-radius: 50%;
+
+  font-family: "Patrick Hand", cursive;
+  font-size: 1.2rem;
+}
+
+.course-section h3 {
+  margin: 0 0 8px;
+
+  font-family: "Patrick Hand", cursive;
+  font-size: 1.55rem;
+  font-weight: 400;
+}
+
+.course-section p,
+.course-section li {
+  line-height: 1.65;
+}
+
+.course-section ul {
+  padding-left: 20px;
+}
+
+.ink-example {
+  margin-top: 15px;
+  padding: 14px 16px;
+
+  border-left: 3px solid var(--ink);
+
+  background: rgba(232, 229, 220, 0.52);
+}
+
+.ink-example strong {
+  font-family: "Patrick Hand", cursive;
+  font-size: 1.1rem;
+  font-weight: 400;
+}
+
+.ink-example p {
+  margin: 5px 0 0;
+}
+
+.practice-paper,
+.recap-paper {
+  margin-top: 28px;
+  padding: 21px;
+
+  border: 1.5px solid var(--ink);
+  border-radius: 4px 14px 5px 12px;
+
+  background: var(--paper);
+  box-shadow: 4px 4px 0 var(--paper-dark);
+}
+
+.practice-paper h3 {
+  margin: 0 0 8px;
+
+  font-family: "Patrick Hand", cursive;
+  font-size: 1.5rem;
+  font-weight: 400;
+}
+
+.practice-paper p {
+  line-height: 1.6;
+}
+
+.practice-paper > span {
+  color: var(--ink-faint);
+  font-size: 0.75rem;
+}
+
+.recap-paper ul {
+  margin-bottom: 0;
+  padding-left: 20px;
+}
+
+.recap-paper li {
+  margin: 8px 0;
+}
+
+.lesson-quiz-form {
+  margin-top: 42px;
+  padding-top: 28px;
+
+  border-top: 2px solid var(--ink);
+}
+
+.quiz-heading {
+  margin-bottom: 26px;
+}
+
+.quiz-heading h2 {
+  margin: 0 0 8px;
+
+  font-family: "Patrick Hand", cursive;
+  font-size: 2rem;
+  font-weight: 400;
+}
+
+.quiz-heading p:last-child {
+  margin: 0;
+}
+
+.lesson-quiz-question {
+  margin: 0 0 22px;
+  padding: 20px;
+
+  border: 1.5px solid var(--ink);
+  border-radius: 4px 14px 5px 12px;
+
+  background: rgba(251, 250, 246, 0.88);
+}
+
+.lesson-quiz-question legend {
+  padding: 0 8px;
+
+  font-family: "Patrick Hand", cursive;
+  font-size: 1.25rem;
+}
+
+.quiz-topic {
+  color: var(--ink-faint);
+  font-size: 0.72rem;
+}
+
+.lesson-options {
+  display: grid;
+  gap: 9px;
+}
+
+.lesson-option {
+  padding: 11px 12px;
+
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+
+  border: 1px solid var(--line-dark);
+  border-radius: 3px 10px 4px 9px;
+
+  cursor: pointer;
+}
+
+.lesson-option:hover {
+  border-color: var(--ink);
+  background: var(--paper-dark);
+}
+
+.lesson-option input {
+  margin-top: 3px;
+}
+
+.lesson-submit-button {
+  margin-top: 8px;
+}
+
+.lesson-results {
+  margin-top: 35px;
+}
+
+.lesson-results[hidden] {
+  display: none;
+}
+
+.score-paper {
+  padding: 24px;
+
+  display: flex;
+  align-items: center;
+  gap: 22px;
+
+  border: 2px solid var(--ink);
+  border-radius: 5px 16px 6px 14px;
+
+  background: var(--paper);
+}
+
+.score-circle {
+  width: 100px;
+  height: 100px;
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+
+  border: 2px solid var(--ink);
+  border-radius: 50%;
+
+  transform: rotate(-2deg);
+}
+
+.score-circle strong {
+  font-family: "Patrick Hand", cursive;
+  font-size: 2rem;
+  font-weight: 400;
+}
+
+.score-circle span {
+  font-size: 0.7rem;
+}
+
+.score-paper h2 {
+  margin: 0 0 6px;
+
+  font-family: "Patrick Hand", cursive;
+  font-size: 1.8rem;
+  font-weight: 400;
+}
+
+.graded-answer-list {
+  margin-top: 18px;
+
+  display: grid;
+  gap: 12px;
+}
+
+.graded-answer {
+  padding: 15px;
+
+  border-left: 4px solid var(--ink);
+  background: rgba(232, 229, 220, 0.48);
+}
+
+.answer-incorrect {
+  border-left-style: double;
+}
+
+.graded-answer p {
+  margin: 6px 0 0;
+}
+
+.next-step-note {
+  margin-top: 20px;
+  padding: 17px;
+
+  border: 1.5px dashed var(--ink);
+}
+
+.next-step-note strong {
+  font-family: "Patrick Hand", cursive;
+  font-size: 1.2rem;
+  font-weight: 400;
+}
+
+.next-step-note p {
+  margin-bottom: 0;
+}
+
+.finish-level-button {
+  margin-top: 20px;
+}
+
+@media (max-width: 650px) {
+  .lesson-overlay {
+    padding: 0;
+  }
+
+  .lesson-notebook {
+    min-height: 100vh;
+    border-radius: 0;
+  }
+
+  .lesson-content {
+    padding-inline: 18px;
+  }
+
+  .lesson-cover {
+    flex-direction: column;
+  }
+
+  .course-section {
+    grid-template-columns: 1fr;
+  }
+
+  .score-paper {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}

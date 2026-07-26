@@ -87,7 +87,8 @@
                 {% endif %}
 
                 <p>
-                  How much time can you commit to this session?
+                  Click any roadmap level to let Gemma create a focused
+                  lesson and quiz from that level’s topics.
                 </p>
               </div>
 
@@ -196,21 +197,24 @@
           </div>
 
           <p>
-            Each level is assigned to a real calendar date. ZEN can adapt
-            later sessions using your quiz results.
+            Each level is assigned to a real calendar date. Click a level to
+            generate its Gemma-powered lesson and quiz.
           </p>
         </div>
 
         <div class="roadmap-list">
           {% for day in plan.roadmap %}
-          <article class="roadmap-item
-              {% if day.status == 'available' %}
-                current
-              {% elif day.status == 'completed' %}
-                completed
-              {% else %}
-                locked
-              {% endif %}">
+          <button type="button" class="roadmap-item level-button
+                {% if day.status == 'available' %}
+                  current
+                {% elif day.status == 'completed' %}
+                  completed
+                {% else %}
+                  locked
+                {% endif %}
+              " data-day="{{ day.day }}" data-study-date="{{ day.study_date }}" data-title="{{ day.title | e }}"
+            data-topics='{{ day.topics | tojson }}' data-objectives='{{ day.objectives | tojson }}'
+            data-minutes="{{ day.estimated_minutes }}">
             <div class="roadmap-date-marker">
               <span>{{ day.month_short }}</span>
               <strong>{{ day.day_number }}</strong>
@@ -219,14 +223,8 @@
             <div class="roadmap-copy">
               <div class="roadmap-meta">
                 <span>Day {{ day.day }}</span>
-
-                <span>
-                  {{ day.weekday_short }}
-                </span>
-
-                <span>
-                  {{ day.estimated_minutes }} min
-                </span>
+                <span>{{ day.weekday_short }}</span>
+                <span>{{ day.estimated_minutes }} min</span>
               </div>
 
               <h3>{{ day.title }}</h3>
@@ -251,7 +249,7 @@
               →
               {% endif %}
             </div>
-          </article>
+          </button>
           {% endfor %}
         </div>
 
@@ -264,8 +262,8 @@
             <h3>Follow today’s page</h3>
 
             <p>
-              Complete the session assigned to today. Future pages will adapt
-              as ZEN learns where you need more support.
+              Complete one focused learning level today. Gemma will generate
+              the lesson and quiz from the roadmap topics you selected.
             </p>
           </div>
         </section>
@@ -273,7 +271,525 @@
     </section>
   </main>
 
-  <script src="/static/app.js"></script>
+  <div class="lesson-overlay" id="lesson-overlay" hidden>
+    <section class="lesson-notebook" role="dialog" aria-modal="true" aria-labelledby="lesson-title">
+      <header class="lesson-toolbar">
+        <div>
+          <p class="section-label">
+            ZEN learning level
+          </p>
+
+          <h2 id="lesson-title">
+            Preparing your lesson…
+          </h2>
+        </div>
+
+        <button type="button" class="lesson-close-button" id="lesson-close-button" aria-label="Close lesson">
+          ×
+        </button>
+      </header>
+
+      <div class="lesson-loading" id="lesson-loading">
+        <div class="writing-animation">
+          <span></span>
+        </div>
+
+        <h3>Gemma is writing your lesson…</h3>
+
+        <p>
+          ZEN is building a focused course and quiz from this roadmap level.
+        </p>
+      </div>
+
+      <div class="lesson-content" id="lesson-content" hidden></div>
+
+      <div class="lesson-error" id="lesson-error" hidden></div>
+    </section>
+  </div>
+
+  <script src="/static/app.js?v=7"></script>
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+      const levelButtons =
+        document.querySelectorAll(".level-button");
+
+      const overlay =
+        document.getElementById("lesson-overlay");
+
+      const closeButton =
+        document.getElementById("lesson-close-button");
+
+      const lessonTitle =
+        document.getElementById("lesson-title");
+
+      const lessonLoading =
+        document.getElementById("lesson-loading");
+
+      const lessonContent =
+        document.getElementById("lesson-content");
+
+      const lessonError =
+        document.getElementById("lesson-error");
+
+      console.log(
+        "ZEN roadmap buttons found:",
+        levelButtons.length
+      );
+
+      function closeLesson() {
+        overlay.hidden = true;
+        document.body.classList.remove("lesson-open");
+      }
+
+      closeButton?.addEventListener(
+        "click",
+        closeLesson
+      );
+
+      overlay?.addEventListener(
+        "click",
+        (event) => {
+          if (event.target === overlay) {
+            closeLesson();
+          }
+        }
+      );
+
+      levelButtons.forEach((button) => {
+        button.addEventListener(
+          "click",
+          async () => {
+            console.log(
+              "Roadmap level clicked:",
+              button.dataset.day
+            );
+
+            overlay.hidden = false;
+            document.body.classList.add(
+              "lesson-open"
+            );
+
+            lessonTitle.textContent =
+              `Preparing Day ${button.dataset.day}…`;
+
+            lessonLoading.hidden = false;
+            lessonContent.hidden = true;
+            lessonError.hidden = true;
+
+            let topics = [];
+            let objectives = [];
+
+            try {
+              topics = JSON.parse(
+                button.dataset.topics || "[]"
+              );
+
+              objectives = JSON.parse(
+                button.dataset.objectives || "[]"
+              );
+            } catch (error) {
+              console.error(
+                "Could not read roadmap data:",
+                error
+              );
+            }
+
+            const requestData = {
+              day: Number(button.dataset.day),
+              study_date:
+                button.dataset.studyDate || "",
+              title:
+                button.dataset.title ||
+                "Study level",
+              topics,
+              objectives,
+              estimated_minutes: Number(
+                button.dataset.minutes || 30
+              ),
+            };
+
+            try {
+              const response = await fetch(
+                "/api/lesson",
+                {
+                  method: "POST",
+                  headers: {
+                    "Content-Type":
+                      "application/json",
+                  },
+                  body: JSON.stringify(
+                    requestData
+                  ),
+                }
+              );
+
+              const data =
+                await response.json();
+
+              if (!response.ok) {
+                throw new Error(
+                  data.detail ||
+                  "Lesson generation failed."
+                );
+              }
+
+              lessonLoading.hidden = true;
+              lessonContent.hidden = false;
+
+              lessonTitle.textContent =
+                data.title ||
+                requestData.title;
+
+              const sections = (
+                data.sections || []
+              )
+                .map(
+                  (section, index) => `
+                    <section class="course-section">
+                      <div class="course-section-number">
+                        ${index + 1}
+                      </div>
+  
+                      <div>
+                        <h3>
+                          ${escapeZenHtml(
+                    section.heading
+                  )}
+                        </h3>
+  
+                        <p>
+                          ${escapeZenHtml(
+                    section.explanation
+                  )}
+                        </p>
+  
+                        ${section.key_points?.length
+                      ? `
+                              <ul>
+                                ${section.key_points
+                        .map(
+                          (point) =>
+                            `<li>${escapeZenHtml(
+                              point
+                            )}</li>`
+                        )
+                        .join("")}
+                              </ul>
+                            `
+                      : ""
+                    }
+  
+                        ${section.example
+                      ? `
+                              <div class="ink-example">
+                                <strong>
+                                  Example
+                                </strong>
+  
+                                <p>
+                                  ${escapeZenHtml(
+                        section.example
+                      )}
+                                </p>
+                              </div>
+                            `
+                      : ""
+                    }
+                      </div>
+                    </section>
+                  `
+                )
+                .join("");
+
+              const quiz = (
+                data.quiz || []
+              )
+                .map(
+                  (
+                    question,
+                    questionIndex
+                  ) => `
+                    <fieldset
+                      class="lesson-quiz-question"
+                    >
+                      <legend>
+                        ${questionIndex + 1}.
+                        ${escapeZenHtml(
+                    question.question
+                  )}
+                      </legend>
+  
+                      <div class="lesson-options">
+                        ${(question.options || [])
+                      .map(
+                        (
+                          option,
+                          optionIndex
+                        ) => `
+                              <label
+                                class="lesson-option"
+                              >
+                                <input
+                                  type="radio"
+                                  name="question-${questionIndex}"
+                                  value="${optionIndex}"
+                                />
+  
+                                <span>
+                                  ${escapeZenHtml(
+                          option
+                        )}
+                                </span>
+                              </label>
+                            `
+                      )
+                      .join("")}
+                      </div>
+                    </fieldset>
+                  `
+                )
+                .join("");
+
+              lessonContent.innerHTML = `
+                <div class="lesson-cover">
+                  <div>
+                    <p class="handwritten-label">
+                      Day ${data.day}
+                      ·
+                      ${escapeZenHtml(
+                data.study_date
+              )}
+                    </p>
+  
+                    <h2>
+                      ${escapeZenHtml(
+                data.title
+              )}
+                    </h2>
+  
+                    <p>
+                      ${escapeZenHtml(
+                data.welcome || ""
+              )}
+                    </p>
+                  </div>
+  
+                  <div class="lesson-time-note">
+                    <strong>
+                      ${data.estimated_minutes}
+                    </strong>
+  
+                    <span>minutes</span>
+                  </div>
+                </div>
+  
+                <div class="lesson-topic-tags">
+                  ${(data.topics || [])
+                  .map(
+                    (topic) =>
+                      `<span>${escapeZenHtml(
+                        topic
+                      )}</span>`
+                  )
+                  .join("")}
+                </div>
+  
+                <div class="course-sections">
+                  ${sections}
+                </div>
+  
+                <section class="practice-paper">
+                  <p class="section-label">
+                    Practice
+                  </p>
+  
+                  <h3>
+                    ${escapeZenHtml(
+                    data.practice_activity
+                      ?.title ||
+                    "Quick practice"
+                  )}
+                  </h3>
+  
+                  <p>
+                    ${escapeZenHtml(
+                    data.practice_activity
+                      ?.instructions || ""
+                  )}
+                  </p>
+                </section>
+  
+                <form
+                  class="lesson-quiz-form"
+                  id="emergency-quiz-form"
+                >
+                  <div class="quiz-heading">
+                    <p class="section-label">
+                      Knowledge check
+                    </p>
+  
+                    <h2>
+                      Finish the level quiz
+                    </h2>
+                  </div>
+  
+                  ${quiz}
+  
+                  <button
+                    type="submit"
+                    class="submit-button"
+                  >
+                    Check my answers
+                  </button>
+                </form>
+  
+                <div
+                  class="lesson-results"
+                  id="emergency-results"
+                  hidden
+                ></div>
+              `;
+
+              document
+                .getElementById(
+                  "emergency-quiz-form"
+                )
+                ?.addEventListener(
+                  "submit",
+                  async (event) => {
+                    event.preventDefault();
+
+                    const selectedAnswers =
+                      (data.quiz || []).map(
+                        (
+                          _,
+                          questionIndex
+                        ) => {
+                          const selected =
+                            document.querySelector(
+                              `input[name="question-${questionIndex}"]:checked`
+                            );
+
+                          return selected
+                            ? Number(
+                              selected.value
+                            )
+                            : -1;
+                        }
+                      );
+
+                    if (
+                      selectedAnswers.includes(
+                        -1
+                      )
+                    ) {
+                      alert(
+                        "Please answer every question."
+                      );
+                      return;
+                    }
+
+                    const gradeResponse =
+                      await fetch(
+                        "/api/grade",
+                        {
+                          method: "POST",
+                          headers: {
+                            "Content-Type":
+                              "application/json",
+                          },
+                          body: JSON.stringify(
+                            {
+                              lesson: data,
+                              selected_answers:
+                                selectedAnswers,
+                            }
+                          ),
+                        }
+                      );
+
+                    const gradeData =
+                      await gradeResponse.json();
+
+                    const results =
+                      document.getElementById(
+                        "emergency-results"
+                      );
+
+                    results.hidden = false;
+
+                    results.innerHTML = `
+                      <section class="score-paper">
+                        <div class="score-circle">
+                          <strong>
+                            ${gradeData.score}%
+                          </strong>
+  
+                          <span>score</span>
+                        </div>
+  
+                        <div>
+                          <p class="section-label">
+                            Gemma feedback
+                          </p>
+  
+                          <h2>
+                            ${escapeZenHtml(
+                      gradeData.feedback
+                        ?.headline ||
+                      "Level complete"
+                    )}
+                          </h2>
+  
+                          <p>
+                            ${escapeZenHtml(
+                      gradeData.feedback
+                        ?.summary ||
+                      "Your quiz has been graded."
+                    )}
+                          </p>
+                        </div>
+                      </section>
+                    `;
+
+                    results.scrollIntoView({
+                      behavior: "smooth",
+                    });
+                  }
+                );
+            } catch (error) {
+              console.error(error);
+
+              lessonLoading.hidden = true;
+              lessonError.hidden = false;
+
+              lessonError.innerHTML = `
+                <h3>
+                  ZEN could not generate the lesson
+                </h3>
+  
+                <p>
+                  ${escapeZenHtml(
+                error.message
+              )}
+                </p>
+              `;
+            }
+          }
+        );
+      });
+
+      function escapeZenHtml(value) {
+        const element =
+          document.createElement("div");
+
+        element.textContent =
+          String(value ?? "");
+
+        return element.innerHTML;
+      }
+    });
+  </script>
 </body>
 
 </html>
