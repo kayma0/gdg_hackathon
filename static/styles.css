@@ -602,6 +602,70 @@ button {
   line-height: 1.45;
 }
 
+.setup-form {
+  margin-top: 8px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: #f8fcff;
+  display: grid;
+  gap: 12px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.field span {
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: var(--primary-dark);
+}
+
+textarea,
+input[type="text"],
+input[type="number"],
+input[type="file"] {
+  width: 100%;
+  padding: 11px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--white);
+  color: var(--text);
+}
+
+textarea {
+  min-height: 96px;
+  resize: vertical;
+}
+
+.row-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.subtle-note {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.submit-button {
+  width: fit-content;
+  padding: 11px 16px;
+  border: 0;
+  border-radius: 999px;
+  color: var(--white);
+  background: var(--primary-dark);
+  font-weight: 700;
+}
+
+.submit-button:hover {
+  background: #345460;
+}
+
 @media (max-width: 920px) {
   .workspace {
     height: auto;
@@ -615,6 +679,12 @@ button {
 
   .roadmap-panel {
     max-height: none;
+  }
+}
+
+@media (max-width: 600px) {
+  .row-fields {
+    grid-template-columns: 1fr;
   }
 }
 
