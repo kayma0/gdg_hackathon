@@ -28,66 +28,14 @@ The MVP should focus on one polished, demo-ready happy path:
   - predefined prompt example
   - upload box
   - deadline input
-  - generate button
-- Result screen
-  - summary of the plan
-  - daily or session-based study schedule
-  - one “minimum win” task for today
-  - supportive copy such as “Done is better than perfect.”
-
-### Key product principles
-- progress over perfection
-- low-friction experience
-- one clear action at a time
-- calm, student-friendly design
-- demo should feel polished even if the backend is simple
-
-### Recommended stack for a hackathon MVP
-- Frontend: Next.js + TypeScript + Tailwind CSS
-- Backend: FastAPI (Python) or Node/Express
-- AI integration: Gemma 4 via Google AI Studio / Vertex AI
-- File handling: upload endpoint that accepts PDF, TXT, DOCX, and plain text
-
-### Suggested app structure
-- frontend/
-  - app/page.tsx
-  - components/UploadForm.tsx
-  - components/StudyPlanResult.tsx
-- backend/
-  - app.py or server.js
-  - services/plan_service.py
-  - prompts/study_prompt.py
-
-### Backend behavior
-The backend should:
-1. accept uploaded file + deadline + available study time
-2. extract text from the uploaded file
-3. build a prompt for Gemma 4
-4. return a structured plan in JSON with fields like:
-   - summary
-   - todays_focus
-   - study_blocks
-   - minimum_win
-   - motivation_note
-
-### Prompt design
-Use a prompt that instructs Gemma 4 to act like a supportive study coach.
-Example direction:
-- make the plan realistic for limited time
-- prioritize the most important topics first
-- avoid perfectionism
-- create short study blocks
-- include one small action the student can do immediately
-
-### MVP UI requirements
-The UI should look polished enough to impress judges, even if only one flow works.
-Include:
-- hero section with strong copy
-- upload card with clear drop area
-- form fields for deadline and study time
-- loading state while the plan is being generated
 - result cards for the generated plan
 - progress-oriented footer message
+
+### Gemini API usage
+The live Gemini integration lives in [app.py](app.py). It reads `GEMINI_API_KEY` from `.env`, uses `gemma-4-26b-a4b-it`, and includes a `thinking_config` plus a system instruction for the study-plan response. The chat flow is also implemented there in the `/api/chat` endpoint.
+
+### Optional Gemini capabilities
+The Step 7 items in the guide are optional SDK features. This app does not wire image upload, function calling, or search grounding into the product flow yet.
 
 ### Demo scenario
 Use one concrete example for the demo:
@@ -165,9 +113,8 @@ A working MVP starter has now been created for this repository.
 5. Review the short plan, timeline, minimum win, and motivation note.
 
 ### Limitations and exceptions
-- Gemma 4 is not hardwired to a live endpoint yet. The app currently uses a deterministic plan generator that works well for the hackathon demo.
-- If you want true Gemma 4 responses later, we can swap in a real API call using a GEMMA_API_URL and API key.
 - PDF parsing is not included in this starter version; the current demo path is optimized for .pptx, .docx, and .txt.
+- The Step 7 Gemini SDK features are documented in the guide but are not part of the current app flow.
 - This is a demo-focused MVP, not a production-grade study assistant.
 
 ### How to run locally
