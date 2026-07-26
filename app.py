@@ -264,14 +264,7 @@ async def build_plan_response(
             "Revision"
         )
 
-<<<<<<< Updated upstream
     plan = await build_plan_with_gemma(
-=======
-    # TEMPORARY:
-    # Replace this function call with the Gemma function later.
-    plan = generate_placeholder_plan()
-    plan=await build_plan_with_gemma(
->>>>>>> Stashed changes
         prompt=prompt,
         deadline=deadline,
         study_minutes=study_minutes_per_day,
@@ -309,12 +302,21 @@ async def build_plan_with_gemma(
     file_names: List[str],
 ) -> dict:
     if GEMMA_CLIENT is None:
-        return build_plan(prompt, deadline, study_minutes, raw_text, file_names)
+        return generate_placeholder_plan(
+            prompt=prompt,
+            deadline=deadline,
+            study_minutes_per_day=study_minutes,
+            raw_text=raw_text,
+            file_names=file_names,
+        )
 
     try:
-        response=GEMMA_CLIENT.models.generate_content(
+        response = GEMMA_CLIENT.models.generate_content(
             model=GEMMA_MODEL,
             config=types.GenerateContentConfig(
+                thinking_config=types.ThinkingConfig(
+                    thinking_level="high"
+                ),
                 system_instruction=(
                     "You are ZEN, a supportive and "
                     "concise study companion. Help "
@@ -322,66 +324,78 @@ async def build_plan_with_gemma(
                     "stay focused and take the next "
                     "small study action."
                 ),
-                temperature=0.4,
+            ),
+            contents=(
+                "Create a short study plan from the following input.\n"
+                f"Prompt: {prompt.strip() or 'Keep it small and realistic.'}\n"
+                f"Deadline: {deadline}\n"
+                f"Study time per day: {study_minutes} minutes\n"
+                f"Source files: {', '.join(file_names) if file_names else 'none'}\n"
+                f"Source text:\n{raw_text[:12000]}"
             ),
         )
+        plan = parse_plan_response(response.text or "", study_minutes)
+        if plan is not None:
+            return plan
+    except Exception:
+        pass
 
-        first_response = chat.send_message(
-            message
-        )
+    return generate_placeholder_plan(
+        prompt=prompt,
+        deadline=deadline,
+        study_minutes_per_day=study_minutes,
+        raw_text=raw_text,
+        file_names=file_names,
+    )
 
-        first_reply = (
-            first_response.text or ""
-        ).strip()
 
-        follow_up_reply = ""
+def parse_plan_response(raw_response: str, study_minutes: int) -> dict | None:
+    cleaned = raw_response.strip()
 
-        if follow_up:
-            second_response = chat.send_message(
-                follow_up
-            )
+    if cleaned.startswith("```"):
+        cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned)
+        cleaned = re.sub(r"\s*```$", "", cleaned)
 
-            follow_up_reply = (
-                second_response.text or ""
-            ).strip()
+    try:
+        parsed = json.loads(cleaned)
+    except json.JSONDecodeError:
+        return None
 
-<<<<<<< Updated upstream
-        return {
-            "first_reply": (
-                first_reply
-                or "I could not generate a reply."
-            ),
-            "follow_up_reply": (
-                follow_up_reply
-            ),
-        }
+    focus_topics = parsed.get("focus_topics")
+    study_blocks = parsed.get("study_blocks")
 
-    except Exception as exc:
-        print(
-            f"Gemma chat request failed: {exc}"
-        )
+    if not isinstance(focus_topics, list) or not isinstance(study_blocks, list):
+        return None
 
-        return {
-            "first_reply": (
-                "Sorry, ZEN could not complete "
-                "that chat request."
-            ),
-            "follow_up_reply": "",
-        }
+    if not all(isinstance(topic, str) for topic in focus_topics):
+        return None
 
-=======
-async def build_chat_response(message: str, follow_up: str="") -> dict:
+    if not all(isinstance(block, dict) for block in study_blocks):
+        return None
+
+    return {
+        "summary": parsed.get("summary") if isinstance(parsed.get("summary"), str) else "Your study plan is ready.",
+        "focus_topics": focus_topics[:4],
+        "study_blocks": study_blocks[:4],
+        "minimum_win": parsed.get("minimum_win") if isinstance(parsed.get("minimum_win"), str) else "Spend 10 minutes reviewing the main topic.",
+        "motivation_note": parsed.get("motivation_note") if isinstance(parsed.get("motivation_note"), str) else "Start small and keep moving.",
+        "custom_prompt": parsed.get("custom_prompt") if isinstance(parsed.get("custom_prompt"), str) else "Keep it small and realistic.",
+        "daily_time": parsed.get("daily_time") if isinstance(parsed.get("daily_time"), str) else f"{study_minutes} minutes per day",
+    }
+
+
+async def build_chat_response(message: str, follow_up: str = "") -> dict:
     if GEMMA_CLIENT is None:
         return {
-            "first_reply": "GEMMA_API_KEY is not configured.",
+            "first_reply": "GEMINI_API_KEY is not configured.",
             "follow_up_reply": "",
         }
 
     try:
-        chat=GEMMA_CLIENT.chats.create(model=GEMMA_MODEL)
-        first_reply=chat.send_message(message).text or ""
-        follow_up_reply=chat.send_message(
-            follow_up).text if follow_up.strip() else ""
+        chat = GEMMA_CLIENT.chats.create(model=GEMMA_MODEL)
+        first_reply = chat.send_message(message).text or ""
+        follow_up_reply = chat.send_message(follow_up).text if follow_up.strip() else ""
+
         return {
             "first_reply": first_reply,
             "follow_up_reply": follow_up_reply or "",
@@ -391,7 +405,6 @@ async def build_chat_response(message: str, follow_up: str="") -> dict:
             "first_reply": "Sorry, the Gemma chat request failed.",
             "follow_up_reply": "",
         }
->>>>>>> Stashed changes
 
 # ---------------------------------------------------------
 # File extraction
